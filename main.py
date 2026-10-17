@@ -33,19 +33,19 @@ bot = commands.Bot(
 # =========================
 
 EMOJIS = {
-    "promo": "<a:giveaway:1559999666068791359>",
-    "demo": "<:angry:1274605955035693057>",
-    "shield": "<:z_mod_DiscordShield:1560000554909040694>",
-    "gear": "<:Settings:1560007503239188594>",
-    "ladder": "<:16400redswordrankicon:1560003340492865639>",
-    "announcement": "<a:1369announce:1560000473623437376>",
-    "audit": "<a:a7_book:1559999925822165105>",
-    "success": "<a:MW_tick:1559999735329456220>",
-    "warning": "<a:03_awarndns:1560000005492703303>",
-    "error": "<a:error:1560000088732999810>",
-    "user": "<:ntl_user:1556434847856328726>",
-    "bullet": "<:MW_arrow_right:1560001178937598175>",
-    "welcome": "<a:wel:1560947318277283893>",
+    "promo": "<a:giveaway:1561077598791016591>",
+    "demo": "<:angry:1561078014895329331>",
+    "shield": "<:z_mod_DiscordShield:1561078954519961622>",
+    "gear": "<:Settings:1561077371895943319>",
+    "ladder": "<:16400redswordrankicon:1561077871206989845>",
+    "announcement": "<:announcement:1561079523641004162>",
+    "audit": "<a:a7_book:1561077741716111362>",
+    "success": "<a:MW_tick:1561077516905484448>",
+    "warning": "<a:03_awarndns:1561077438816194632>",
+    "error": "<a:error:1561078063968686081>",
+    "user": "<:ntl_user:1561077921395904653>",
+    "bullet": "<:MW_arrow_right:1561077250638610563>",
+    "welcome": "<a:wel:1561077660648738876>",
     "ticket": "<:ticket:1560983848345665637>"
 }
 
