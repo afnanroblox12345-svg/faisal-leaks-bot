@@ -498,17 +498,35 @@ async def staff_cmd(ctx, member: discord.Member):
 @bot.command(name="role")
 @commands.guild_only()
 async def role_cmd(ctx, member: discord.Member, target_role: discord.Role):
-    """Toggles a role on a member."""
-    if not user_is_supervisor(ctx):
+    """Toggles a role on a member, ensuring users cannot manage roles higher or equal to their own."""
+    is_owner = (ctx.author.id == OWNER_ID or ctx.author.id == ctx.guild.owner_id)
+
+    if not is_owner and not user_is_supervisor(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
         return
 
+    # Check if the target role is higher than or equal to the bot's highest role
+    if target_role >= ctx.guild.me.top_role:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I cannot manage that role because it is higher than or equal to my highest role.", color=discord.Color.red()))
+        return
+
+    # Check if the user is trying to add/remove a role higher than or equal to their own top role
+    if not is_owner and target_role >= ctx.author.top_role:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot manage a role that is higher than or equal to your own highest role.", color=discord.Color.red()))
+        return
+
     if target_role in member.roles:
-        await member.remove_roles(target_role)
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['demo']} Removed {target_role.mention} from {member.mention}.", color=discord.Color.red()))
+        try:
+            await member.remove_roles(target_role, reason=f"Role toggled off by {ctx.author}")
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['demo']} Removed {target_role.mention} from {member.mention}.", color=discord.Color.red()))
+        except discord.Forbidden:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to remove that role.", color=discord.Color.red()))
     else:
-        await member.add_roles(target_role)
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['promo']} Added {target_role.mention} to {member.mention}.", color=discord.Color.green()))
+        try:
+            await member.add_roles(target_role, reason=f"Role toggled on by {ctx.author}")
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['promo']} Added {target_role.mention} to {member.mention}.", color=discord.Color.green()))
+        except discord.Forbidden:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to assign that role.", color=discord.Color.red()))
 
 
 @bot.command(name="steal")
