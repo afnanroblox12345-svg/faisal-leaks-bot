@@ -54,7 +54,8 @@ config = {
     "promodemo_channels": {},
     "audit_channels": {},
     "rank_ladders": {},
-    "staff_limits": {}
+    "staff_limits": {},
+    "warnings": {}
 }
 
 
@@ -442,21 +443,16 @@ async def staffintro(ctx):
     )
 
     embed.add_field(
-        name=f"{EMOJIS['warning']} Moderation Commands (Max 3 Kicks/Bans Per 24 Hours)",
+        name=f"{EMOJIS['warning']} Moderation & Safety Commands",
         value=(
-            f"{EMOJIS['bullet']} `>kick @member [reason]` — Kicks a disruptive user from the server.\n"
-            f"{EMOJIS['bullet']} `>ban @member [reason]` — Permanently bans a rule-breaker.\n"
+            f"{EMOJIS['bullet']} `>kick @member [reason]` — Kicks a disruptive user (Max 3/24h).\n"
+            f"{EMOJIS['bullet']} `>ban @member [reason]` — Permanently bans a rule-breaker (Max 3/24h).\n"
+            f"{EMOJIS['bullet']} `>unban <user_id> [reason]` — Unbans a user by ID.\n"
             f"{EMOJIS['bullet']} `>mute @member [reason]` — Times out a user for 10 minutes.\n"
-            f"{EMOJIS['bullet']} `>clear [amount]` — Purges recent chat messages cleanly."
-        ),
-        inline=False
-    )
-
-    embed.add_field(
-        name=f"{EMOJIS['user']} Utility & Information",
-        value=(
-            f"{EMOJIS['bullet']} `>userinfo [@member]` — Checks account creation, join dates, and roles.\n"
-            f"{EMOJIS['bullet']} `>avatar [@member]` — Views high-resolution profile pictures."
+            f"{EMOJIS['bullet']} `>unmute @member [reason]` — Removes timeout from a member.\n"
+            f"{EMOJIS['bullet']} `>warn @member [reason]` — Issues a formal warning.\n"
+            f"{EMOJIS['bullet']} `>unwarn @member [index]` — Removes a warning.\n"
+            f"{EMOJIS['bullet']} `>clear [amount]` — Purges chat messages."
         ),
         inline=False
     )
@@ -505,13 +501,11 @@ async def role_cmd(ctx, member: discord.Member, target_role: discord.Role):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
         return
 
-    # Check if the target role is higher than or equal to the bot's highest role
-    if target_role >= ctx.guild.me.top_role:
+    if target_role.position >= ctx.guild.me.top_role.position:
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I cannot manage that role because it is higher than or equal to my highest role.", color=discord.Color.red()))
         return
 
-    # Check if the user is trying to add/remove a role higher than or equal to their own top role
-    if not is_owner and target_role >= ctx.author.top_role:
+    if not is_owner and target_role.position >= ctx.author.top_role.position:
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot manage a role that is higher than or equal to your own highest role.", color=discord.Color.red()))
         return
 
@@ -581,9 +575,21 @@ async def ticketsetup(ctx):
 @bot.command(name="kick")
 @commands.guild_only()
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
-    """Kicks a member (Staff capped at 3 per 24 hours)."""
+    """Kicks a member (Staff capped at 3 per 24 hours with hierarchy checks)."""
     if not user_is_staff(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.guild.owner_id or member.id == OWNER_ID:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot kick the server owner or bot owner.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot kick yourself.", color=discord.Color.orange()))
+        return
+
+    if not user_is_owner(ctx) and member.top_role.position >= ctx.author.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot kick {member.mention} because their highest role is higher than or equal to yours.", color=discord.Color.red()))
         return
 
     allowed, count = check_and_increment_action_limit(ctx, "kicks", limit=3)
@@ -602,9 +608,21 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
 @bot.command(name="ban")
 @commands.guild_only()
 async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
-    """Bans a member (Staff capped at 3 per 24 hours)."""
+    """Bans a member (Staff capped at 3 per 24 hours with hierarchy checks)."""
     if not user_is_staff(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.guild.owner_id or member.id == OWNER_ID:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot ban the server owner or bot owner.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot ban yourself.", color=discord.Color.orange()))
+        return
+
+    if not user_is_owner(ctx) and member.top_role.position >= ctx.author.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot ban {member.mention} because their highest role is higher than or equal to yours.", color=discord.Color.red()))
         return
 
     allowed, count = check_and_increment_action_limit(ctx, "bans", limit=3)
@@ -620,23 +638,29 @@ async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to ban that member.", color=discord.Color.red()))
 
 
-@bot.command(name="clear")
+@bot.command(name="unban")
 @commands.guild_only()
-async def clear(ctx, amount: int = 5):
-    """Purges messages."""
+async def unban(ctx, user_id: int, *, reason="No reason provided"):
+    """Unbans a user by their Discord User ID."""
     if not user_is_staff(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
         return
 
-    await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared {amount} messages.", color=discord.Color.green()))
-    await msg.delete(delay=3)
+    try:
+        user = await bot.fetch_user(user_id)
+        await ctx.guild.unban(user, reason=f"{reason} (Unbanned by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Successfully unbanned {user.mention} (`{user.id}`) | Reason: {reason}", color=discord.Color.green()))
+        await audit(ctx.guild, f"User unbanned: {user} ({user.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.NotFound:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Could not find a banned user with ID `{user_id}`.", color=discord.Color.red()))
+    except discord.HTTPException:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Failed to unban the user.", color=discord.Color.red()))
 
 
 @bot.command(name="mute")
 @commands.guild_only()
 async def mute(ctx, member: discord.Member, *, reason="No reason provided"):
-    """Timeouts a member."""
+    """Timeouts a member for 10 minutes."""
     if not user_is_staff(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
         return
@@ -648,6 +672,115 @@ async def mute(ctx, member: discord.Member, *, reason="No reason provided"):
         await audit(ctx.guild, f"Member timed out: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
     except discord.Forbidden:
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to timeout that member.", color=discord.Color.red()))
+
+
+@bot.command(name="unmute")
+@commands.guild_only()
+async def unmute(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Removes timeout from a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    try:
+        await member.timeout(None, reason=f"{reason} (Unmuted by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Removed timeout from {member.mention}.", color=discord.Color.green()))
+        await audit(ctx.guild, f"Member timeout removed: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to unmute that member.", color=discord.Color.red()))
+
+
+@bot.command(name="warn")
+@commands.guild_only()
+async def warn(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Issues a formal warning to a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id or member.id == ctx.guild.owner_id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot warn that user.", color=discord.Color.orange()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(member.id)
+
+    if "warnings" not in config:
+        config["warnings"] = {}
+    if guild_id not in config["warnings"]:
+        config["warnings"][guild_id] = {}
+    if user_id not in config["warnings"][guild_id]:
+        config["warnings"][guild_id][user_id] = []
+
+    config["warnings"][guild_id][user_id].append({
+        "reason": reason,
+        "moderator": str(ctx.author),
+        "timestamp": discord.utils.utcnow().isoformat()
+    })
+    save_config()
+
+    warn_count = len(config["warnings"][guild_id][user_id])
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['warning']} Member Warned",
+        description=f"{member.mention} has been warned.\n**Reason:** {reason}\n**Total Warnings:** {warn_count}",
+        color=discord.Color.orange(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"Moderator: {ctx.author}")
+    await ctx.reply(embed=embed)
+
+    try:
+        await member.send(embed=discord.Embed(title=f"{EMOJIS['warning']} You were warned in {ctx.guild.name}", description=f"**Reason:** {reason}", color=discord.Color.orange()))
+    except discord.HTTPException:
+        pass
+
+    await audit(ctx.guild, f"Member warned: {member} ({member.id}) | Reason: {reason} | Total: {warn_count} | By: {ctx.author}")
+
+
+@bot.command(name="unwarn")
+@commands.guild_only()
+async def unwarn(ctx, member: discord.Member, index: int = None):
+    """Removes a warning from a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(member.id)
+
+    if "warnings" not in config or guild_id not in config["warnings"] or user_id not in config["warnings"][guild_id] or not config["warnings"][guild_id][user_id]:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} {member.mention} has no warnings recorded.", color=discord.Color.orange()))
+        return
+
+    user_warns = config["warnings"][guild_id][user_id]
+
+    if index is None:
+        config["warnings"][guild_id][user_id] = []
+        save_config()
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared all warnings for {member.mention}.", color=discord.Color.green()))
+        await audit(ctx.guild, f"All warnings cleared for {member} ({member.id}) by {ctx.author}")
+    else:
+        if 1 <= index <= len(user_warns):
+            removed = user_warns.pop(index - 1)
+            save_config()
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Removed warning #{index} for {member.mention} (Reason: `{removed['reason']}`).", color=discord.Color.green()))
+            await audit(ctx.guild, f"Warning #{index} removed for {member} ({member.id}) by {ctx.author}")
+        else:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Invalid warning index number.", color=discord.Color.red()))
+
+
+@bot.command(name="clear")
+@commands.guild_only()
+async def clear(ctx, amount: int = 5):
+    """Purges messages."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared {amount} messages.", color=discord.Color.green()))
+    await msg.delete(delay=3)
 
 
 # =========================
@@ -892,7 +1025,7 @@ async def staffsettings(ctx):
 async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>steal`", inline=False)
-    embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>clear`, `>mute`", inline=False)
+    embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
     embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>ticketsetup`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`", inline=False)
