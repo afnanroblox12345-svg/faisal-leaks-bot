@@ -55,7 +55,8 @@ config = {
     "audit_channels": {},
     "rank_ladders": {},
     "staff_limits": {},
-    "warnings": {}
+    "warnings": {},
+    "trainings": {}
 }
 
 
@@ -150,6 +151,97 @@ async def audit(guild, message):
         await channel.send(message, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         logging.exception("Failed to send audit log")
+
+
+# =========================
+# STAFF TRAINING VIEWS
+# =========================
+
+class TrainingControlView(discord.ui.View):
+    def __init__(self, trainee_id, trainer_id):
+        super().__init__(timeout=None)
+        self.trainee_id = trainee_id
+        self.trainer_id = trainer_id
+
+    @discord.ui.button(label="Pass Training", style=discord.ButtonStyle.green, custom_id="pass_training_btn")
+    async def pass_training(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trainer_id and interaction.user.id != interaction.guild.owner_id and interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(f"{EMOJIS['error']} Only the designated trainer can complete this evaluation.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        user_id = str(self.trainee_id)
+
+        if "trainings" not in config:
+            config["trainings"] = {}
+        if guild_id not in config["trainings"]:
+            config["trainings"][guild_id] = {}
+
+        config["trainings"][guild_id][user_id] = {
+            "status": "PASSED",
+            "trainer": str(interaction.user),
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        save_config()
+
+        trainee = interaction.guild.get_member(self.trainee_id)
+        trainee_mention = trainee.mention if trainee else f"<@{self.trainee_id}>"
+
+        embed = discord.Embed(
+            title=f"{EMOJIS['success']} Training Passed!",
+            description=f"{trainee_mention} has successfully passed staff training!",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name=f"{EMOJIS['user']} Trainee", value=trainee_mention, inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Trainer", value=interaction.user.mention, inline=True)
+        embed.set_footer(text="Faisal Mod • Staff Training System")
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        await audit(interaction.guild, f"Staff Training Passed: {trainee_mention} | Trainer: {interaction.user}")
+
+    @discord.ui.button(label="Fail Training", style=discord.ButtonStyle.red, custom_id="fail_training_btn")
+    async def fail_training(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trainer_id and interaction.user.id != interaction.guild.owner_id and interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(f"{EMOJIS['error']} Only the designated trainer can complete this evaluation.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        user_id = str(self.trainee_id)
+
+        if "trainings" not in config:
+            config["trainings"] = {}
+        if guild_id not in config["trainings"]:
+            config["trainings"][guild_id] = {}
+
+        config["trainings"][guild_id][user_id] = {
+            "status": "FAILED",
+            "trainer": str(interaction.user),
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        save_config()
+
+        trainee = interaction.guild.get_member(self.trainee_id)
+        trainee_mention = trainee.mention if trainee else f"<@{self.trainee_id}>"
+
+        embed = discord.Embed(
+            title=f"{EMOJIS['demo']} Training Failed",
+            description=f"{trainee_mention} did not pass staff training at this time.",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name=f"{EMOJIS['user']} Trainee", value=trainee_mention, inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Trainer", value=interaction.user.mention, inline=True)
+        embed.set_footer(text="Faisal Mod • Staff Training System")
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        await audit(interaction.guild, f"Staff Training Failed: {trainee_mention} | Trainer: {interaction.user}")
 
 
 # =========================
@@ -282,6 +374,87 @@ async def change_staff_role(ctx, member, target_role, action):
 
 
 # =========================
+# STAFF TRAINING COMMANDS
+# =========================
+
+@bot.command(name="train")
+@commands.guild_only()
+async def train(ctx, trainee: discord.Member):
+    """Starts an interactive training module for a staff member."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only staff supervisors can initiate training sessions.", color=discord.Color.red()))
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['shield']} Staff Training Session Initiated",
+        description=f"Welcome {trainee.mention} to your official staff training session!",
+        color=discord.Color.blurple(),
+        timestamp=discord.utils.utcnow()
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['user']} Trainee Info",
+        value=f"{trainee.mention}\nID: `{trainee.id}`",
+        inline=True
+    )
+    embed.add_field(
+        name=f"{EMOJIS['shield']} Trainer",
+        value=ctx.author.mention,
+        inline=True
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['gear']} Training Modules & Curriculum",
+        value=(
+            f"{EMOJIS['bullet']} **1. Moderation Quotas:** Max 3 kicks/bans per 24 hours.\n"
+            f"{EMOJIS['bullet']} **2. Moderation Tools:** Use `>warn`, `>mute`, `>clear`, `>kick`, and `>ban` appropriately.\n"
+            f"{EMOJIS['bullet']} **3. Ticket Management:** Assist users politely and close tickets using button controls.\n"
+            f"{EMOJIS['bullet']} **4. Hierarchy & Respect:** Do not attempt commands on higher ranks."
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text=f"{ctx.guild.name} • Trainer Controls Below", icon_url=ctx.author.display_avatar.url)
+
+    view = TrainingControlView(trainee_id=trainee.id, trainer_id=ctx.author.id)
+    await ctx.send(embed=embed, view=view)
+    await audit(ctx.guild, f"Staff Training Started: {trainee} ({trainee.id}) by {ctx.author}")
+
+
+@bot.command(name="trainings")
+@commands.guild_only()
+async def trainings(ctx, member: discord.Member = None):
+    """Checks the training status of a staff member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    m = member or ctx.author
+    guild_id = str(ctx.guild.id)
+    user_id = str(m.id)
+
+    record = config.get("trainings", {}).get(guild_id, {}).get(user_id)
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['audit']} Staff Training Record",
+        color=discord.Color.blue(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=m.display_avatar.url)
+
+    if not record:
+        embed.description = f"{m.mention} has no recorded training sessions yet."
+    else:
+        status_emoji = EMOJIS['success'] if record['status'] == "PASSED" else EMOJIS['demo']
+        embed.description = f"Training status for {m.mention}:"
+        embed.add_field(name=f"{status_emoji} Status", value=f"**{record['status']}**", inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Evaluated By", value=record['trainer'], inline=True)
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    await ctx.reply(embed=embed)
+
+
+# =========================
 # MANAGEMENT & STAFF COMMANDS
 # =========================
 
@@ -409,8 +582,8 @@ async def superintro(ctx):
     )
 
     embed.add_field(
-        name=f"{EMOJIS['gear']} `>role @member @role`",
-        value=f"{EMOJIS['bullet']} Quickly toggles an extra role on or off for a member.",
+        name=f"{EMOJIS['gear']} `>train @member`",
+        value=f"{EMOJIS['bullet']} Starts an interactive staff training session.",
         inline=False
     )
 
@@ -1024,7 +1197,7 @@ async def staffsettings(ctx):
 @bot.command(name="help")
 async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
-    embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>steal`", inline=False)
+    embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
     embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>ticketsetup`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
