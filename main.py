@@ -1486,6 +1486,7 @@ async def betflip(ctx, choice: str, bet: int):
 @bot.command(name="economy")
 @commands.guild_only()
 async def economy_help(ctx):
+    embed = economy_embed("Economy Commands", "`>balance [@member]` · `>daily` · `>work` · `>beg` · `>crime`\n`>deposit <amount/all>` · `>withdraw <amount/all>` · `>pay @member <amount>`\n`>leaderboard` · `>shop` · `>buy <item>` · `>sell <item>` · `>inventory [@member]`\n`>bankupgrade` · `>rob @member` · `>slots <bet>` · `>betflip <heads/tails> <bet>\n\n" + f"All balances are saved per server. Currency: {ECONOMY_EMOJI}")
     description = (
         "`>balance [@member]` · `>daily` · `>work` · `>beg` · `>crime`\n"
         "`>deposit <amount/all>` · `>withdraw <amount/all>` · `>pay @member <amount>`\n"
