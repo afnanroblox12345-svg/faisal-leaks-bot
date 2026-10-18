@@ -48,8 +48,8 @@ EMOJIS = {
     "welcome": "<a:wel:1561077660648738876>",
     "ticket": "<:ticket:1560983848345665637>",
     "support": "<:Support:1561328482724614238>",
-    "decomp": "<a:decomp:1561328437057032222>",
-    "report": "<:report:1561328585954951269>"
+    "purchase": "<a:decomp:1561328437057032222>",
+    "partner": "<:Partner:1561337139373932593>"
 }
 
 config = {
@@ -213,9 +213,8 @@ class TicketSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="Support", description="General help and support inquiries", emoji=discord.PartialEmoji.from_str(EMOJIS['support'])),
-            discord.SelectOption(label="Report", description="Report a user or issue", emoji=discord.PartialEmoji.from_str(EMOJIS['report'])),
-            discord.SelectOption(label="Giveaway Claim", description="Claim your giveaway prize", emoji=discord.PartialEmoji.from_str(EMOJIS['promo'])),
-            discord.SelectOption(label="Decomp Use", description="Decomp service requests", emoji=discord.PartialEmoji.from_str(EMOJIS['decomp']))
+            discord.SelectOption(label="Purchase", description="Purchase service requests", emoji=discord.PartialEmoji.from_str(EMOJIS['purchase'])),
+            discord.SelectOption(label="Partnership", description="Server partnership requests", emoji=discord.PartialEmoji.from_str(EMOJIS['partner']))
         ]
         super().__init__(placeholder="Select a ticket category...", min_values=1, max_values=1, options=options, custom_id="ticket_category_select")
 
@@ -246,8 +245,13 @@ class TicketSelect(discord.ui.Select):
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
-        cat_id = guild_setting("ticket_categories", guild.id)
-        category = guild.get_channel(int(cat_id)) if cat_id else discord.utils.get(guild.categories, name="Support Tickets")
+        # Retrieve specific category configured for this ticket type
+        categories_dict = config.get("ticket_categories", {}).get(str(guild.id), {})
+        cat_id = categories_dict.get(category_name.lower())
+        
+        category = guild.get_channel(int(cat_id)) if cat_id else None
+        if not category:
+            category = discord.utils.get(guild.categories, name="Support Tickets")
         if not category:
             category = await guild.create_category("Support Tickets")
 
@@ -784,10 +788,9 @@ async def sendticket(ctx, channel: discord.TextChannel = None):
         description=(
             f"Welcome to the **{ctx.guild.name}** Support Center! {EMOJIS['shield']}\n\n"
             f"Please select a category from the dropdown menu below to open a private ticket with our staff team:\n\n"
-            f"{EMOJIS['bullet']} {EMOJIS['support']} **Support** — General questions & assistance\n"
-            f"{EMOJIS['bullet']} {EMOJIS['report']} **Report** — Report users or rule breakers\n"
-            f"{EMOJIS['bullet']} {EMOJIS['promo']} **Giveaway Claim** — Claim won prizes\n"
-            f"{EMOJIS['bullet']} {EMOJIS['decomp']} **Decomp Use** — Decomp service requests"
+            f"{EMOJIS['bullet']} {EMOJIS['support']} **Support** — General help & assistance\n"
+            f"{EMOJIS['bullet']} {EMOJIS['purchase']} **Purchase** — Purchase service requests\n"
+            f"{EMOJIS['bullet']} {EMOJIS['partner']} **Partnership** — Server partnership requests"
         ),
         color=discord.Color.blurple(),
         timestamp=discord.utils.utcnow()
@@ -816,18 +819,27 @@ async def setstaffrole(ctx, role: discord.Role):
 
 @bot.command(name="setcategory")
 @commands.guild_only()
-async def setcategory(ctx, category: discord.CategoryChannel):
-    """Sets the category where new tickets are created."""
+async def setcategory(ctx, ticket_type: str, category: discord.CategoryChannel):
+    """Sets the Discord category for a specific ticket type (support, purchase, partnership)."""
     if not user_is_owner(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
         return
 
+    ticket_type = ticket_type.lower()
+    if ticket_type not in ["support", "purchase", "partnership"]:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Invalid type! Choose from: `support`, `purchase`, `partnership`.\nExample: `>setcategory support #CategoryName`", color=discord.Color.red()))
+        return
+
+    guild_id = str(ctx.guild.id)
     if "ticket_categories" not in config:
         config["ticket_categories"] = {}
-    config["ticket_categories"][str(ctx.guild.id)] = category.id
+    if guild_id not in config["ticket_categories"]:
+        config["ticket_categories"][guild_id] = {}
+
+    config["ticket_categories"][guild_id][ticket_type] = category.id
     save_config()
 
-    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Ticket creation category set to **{category.name}**.", color=discord.Color.green()))
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Category for **{ticket_type.capitalize()}** tickets set to **{category.name}**.", color=discord.Color.green()))
 
 
 # =========================
@@ -1295,7 +1307,7 @@ async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
-    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory #category`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory <support/purchase/partnership> #category`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`", inline=False)
     embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>staffsettings`", inline=False)
