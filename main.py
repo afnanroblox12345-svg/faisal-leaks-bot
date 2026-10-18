@@ -46,7 +46,10 @@ EMOJIS = {
     "user": "<:ntl_user:1561077921395904653>",
     "bullet": "<:MW_arrow_right:1561077250638610563>",
     "welcome": "<a:wel:1561077660648738876>",
-    "ticket": "<:ticket:1560983848345665637>"
+    "ticket": "<:ticket:1560983848345665637>",
+    "support": "<:Support:1561328482724614238>",
+    "decomp": "<a:decomp:1561328437057032222>",
+    "report": "<:report:1561328585954951269>"
 }
 
 config = {
@@ -154,7 +157,173 @@ async def audit(guild, message):
 
 
 # =========================
-# STAFF TRAINING VIEWS
+# TICKET SYSTEM INTERACTIVE VIEWS
+# =========================
+
+class TicketPanelActionsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Claim Ticket", style=discord.ButtonStyle.green, emoji="👋", custom_id="claim_ticket_btn")
+    async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not user_is_staff_interaction(interaction):
+            await interaction.response.send_message(f"{EMOJIS['error']} Only staff members can claim tickets.", ephemeral=True)
+            return
+
+        button.disabled = True
+        button.label = f"Claimed by {interaction.user.name}"
+        button.style = discord.ButtonStyle.secondary
+
+        staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), interaction.guild.roles)
+        ping_target = staff_team_role.mention if staff_team_role else ""
+
+        await interaction.response.edit_message(view=self)
+        await interaction.channel.send(f"{EMOJIS['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
+        await audit(interaction.guild, f"Ticket claimed: {interaction.channel.name} by {interaction.user}")
+
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.red, emoji="🔒", custom_id="close_ticket_btn")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(f"{EMOJIS['warning']} Closing ticket in 5 seconds...", ephemeral=False)
+        await audit(interaction.guild, f"Ticket closed by {interaction.user} | Channel: {interaction.channel.name}")
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete(reason=f"Closed by {interaction.user}")
+        except discord.HTTPException:
+            pass
+
+def user_is_staff_interaction(interaction):
+    if interaction.user.guild_permissions.kick_members:
+        return True
+    role_id = guild_setting("supervisor_roles", interaction.guild.id)
+    if role_id and any(r.id == int(role_id) for r in interaction.user.roles):
+        return True
+    return any("staff" in r.name.lower() or "trial" in r.name.lower() or "mod" in r.name.lower() for r in interaction.user.roles)
+
+
+class TicketSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Support", description="General help and support inquiries", emoji=discord.PartialEmoji.from_str(EMOJIS['support'])),
+            discord.SelectOption(label="Report", description="Report a user or issue", emoji=discord.PartialEmoji.from_str(EMOJIS['report'])),
+            discord.SelectOption(label="Giveaway Claim", description="Claim your giveaway prize", emoji=discord.PartialEmoji.from_str(EMOJIS['promo'])),
+            discord.SelectOption(label="Decomp Use", description="Decomp service requests", emoji=discord.PartialEmoji.from_str(EMOJIS['decomp']))
+        ]
+        super().__init__(placeholder="Select a ticket category...", min_values=1, max_values=1, options=options, custom_id="ticket_category_select")
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        member = interaction.user
+        category_name = self.values[0]
+
+        existing_channel = discord.utils.get(guild.text_channels, name=f"ticket-{member.name.lower()}")
+        if existing_channel:
+            await interaction.response.send_message(f"{EMOJIS['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
+            return
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
+        }
+
+        supervisor_role_id = guild_setting("supervisor_roles", guild.id)
+        if supervisor_role_id:
+            sup_role = guild.get_role(int(supervisor_role_id))
+            if sup_role:
+                overwrites[sup_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+        staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), guild.roles)
+        if staff_team_role:
+            overwrites[staff_team_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+        category = discord.utils.get(guild.categories, name="Support Tickets")
+        if not category:
+            category = await guild.create_category("Support Tickets")
+
+        channel = await guild.create_text_channel(
+            name=f"ticket-{member.name}",
+            category=category,
+            overwrites=overwrites,
+            topic=f"Category: {category_name} | Ticket for {member} ({member.id})"
+        )
+
+        embed = discord.Embed(
+            title=f"{EMOJIS['ticket']} Support Ticket — {category_name}",
+            description=f"Hello {member.mention}!\nYou selected **{category_name}**. Support staff will be with you shortly.\n\nClick **Claim Ticket** to take ownership or **Close Ticket** when finished.",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(text="Faisal Mod • Ticket System")
+
+        await channel.send(content=staff_team_role.mention if staff_team_role else "", embed=embed, view=TicketPanelActionsView())
+        await interaction.response.send_message(f"{EMOJIS['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
+        await audit(guild, f"Ticket created ({category_name}) by {member} ({member.id}) | Channel: {channel.name}")
+
+
+class TicketDropdownView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(TicketSelect())
+
+
+# =========================
+# EMBED HELPERS
+# =========================
+
+async def send_promodemo_embed(guild, member, role, action, moderator):
+    channel_id = guild_setting("promodemo_channels", guild.id)
+    if not channel_id:
+        return
+    channel = guild.get_channel(int(channel_id))
+    if channel is None:
+        return
+
+    promoted = action == "promoted"
+    embed = discord.Embed(
+        title=f"{EMOJIS['promo']} Staff Promotion" if promoted else f"{EMOJIS['demo']} Staff Demotion",
+        description=f"{member.mention} has been **promoted**!" if promoted else f"{member.mention} has been **demoted**.",
+        color=discord.Color.green() if promoted else discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(name=f"{EMOJIS['user']} Staff Member", value=f"{member.mention}\n`{member.id}`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ladder']} Role", value=role.mention, inline=True)
+    embed.add_field(name=f"{EMOJIS['shield']} Action By", value=moderator.mention, inline=True)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(text=f"{guild.name} • Faisal Mod System")
+
+    try:
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        pass
+
+
+async def change_staff_role(ctx, member, target_role, action):
+    if target_role is None:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} The specified or configured role could not be found in this server.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id or member.id == ctx.guild.owner_id or target_role.is_default() or target_role.managed:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} Action unauthorized or invalid role.", color=discord.Color.orange()))
+        return
+
+    try:
+        if action == "promote":
+            await member.add_roles(target_role, reason=f"Staff promotion by {ctx.author}")
+            result = "promoted"
+        else:
+            await member.remove_roles(target_role, reason=f"Staff demotion by {ctx.author}")
+            result = "demoted"
+
+        await send_promodemo_embed(ctx.guild, member, target_role, result, ctx.author)
+        await audit(ctx.guild, f"Staff {result}: {member} | Role: {target_role.name} | By: {ctx.author}")
+        emoji = EMOJIS['promo'] if result == "promoted" else EMOJIS['demo']
+        await ctx.reply(embed=discord.Embed(description=f"{emoji} {member.mention} was **{result}**: {target_role.mention}", color=discord.Color.green() if result == "promoted" else discord.Color.red()))
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to modify roles.", color=discord.Color.red()))
+
+
+# =========================
+# STAFF TRAINING COMMANDS
 # =========================
 
 class TrainingControlView(discord.ui.View):
@@ -243,139 +412,6 @@ class TrainingControlView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
         await audit(interaction.guild, f"Staff Training Failed: {trainee_mention} | Trainer: {interaction.user}")
 
-
-# =========================
-# TICKET SYSTEM VIEWS
-# =========================
-
-class TicketCloseView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.red, emoji="🔒", custom_id="close_ticket_btn")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"{EMOJIS['warning']} Closing ticket in 5 seconds...", ephemeral=False)
-        await audit(interaction.guild, f"Ticket closed by {interaction.user} | Channel: {interaction.channel.name}")
-        await asyncio.sleep(5)
-        try:
-            await interaction.channel.delete(reason=f"Closed by {interaction.user}")
-        except discord.HTTPException:
-            pass
-
-
-class TicketSetupView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Create Ticket", style=discord.ButtonStyle.green, custom_id="create_ticket_btn")
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        member = interaction.user
-
-        existing_channel = discord.utils.get(guild.text_channels, name=f"ticket-{member.name.lower()}")
-        if existing_channel:
-            await interaction.response.send_message(f"{EMOJIS['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
-            return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
-        }
-
-        supervisor_role_id = guild_setting("supervisor_roles", guild.id)
-        if supervisor_role_id:
-            sup_role = guild.get_role(int(supervisor_role_id))
-            if sup_role:
-                overwrites[sup_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-        staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), guild.roles)
-        if staff_team_role:
-            overwrites[staff_team_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-        category = discord.utils.get(guild.categories, name="Support Tickets")
-        if not category:
-            category = await guild.create_category("Support Tickets")
-
-        channel = await guild.create_text_channel(
-            name=f"ticket-{member.name}",
-            category=category,
-            overwrites=overwrites,
-            topic=f"Support ticket for {member} ({member.id})"
-        )
-
-        embed = discord.Embed(
-            title=f"{EMOJIS['ticket']} Support Ticket",
-            description=f"Hello {member.mention}! Support staff will be with you shortly.\nClick the button below when you are ready to close this ticket.",
-            color=discord.Color.blue(),
-            timestamp=discord.utils.utcnow()
-        )
-        embed.set_footer(text="Faisal Mod • Ticket System")
-
-        await channel.send(embed=embed, view=TicketCloseView())
-        await interaction.response.send_message(f"{EMOJIS['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
-        await audit(guild, f"Ticket created by {member} ({member.id}) | Channel: {channel.name}")
-
-
-# =========================
-# EMBED HELPERS
-# =========================
-
-async def send_promodemo_embed(guild, member, role, action, moderator):
-    channel_id = guild_setting("promodemo_channels", guild.id)
-    if not channel_id:
-        return
-    channel = guild.get_channel(int(channel_id))
-    if channel is None:
-        return
-
-    promoted = action == "promoted"
-    embed = discord.Embed(
-        title=f"{EMOJIS['promo']} Staff Promotion" if promoted else f"{EMOJIS['demo']} Staff Demotion",
-        description=f"{member.mention} has been **promoted**!" if promoted else f"{member.mention} has been **demoted**.",
-        color=discord.Color.green() if promoted else discord.Color.red(),
-        timestamp=discord.utils.utcnow()
-    )
-    embed.add_field(name=f"{EMOJIS['user']} Staff Member", value=f"{member.mention}\n`{member.id}`", inline=False)
-    embed.add_field(name=f"{EMOJIS['ladder']} Role", value=role.mention, inline=True)
-    embed.add_field(name=f"{EMOJIS['shield']} Action By", value=moderator.mention, inline=True)
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=f"{guild.name} • Faisal Mod System")
-
-    try:
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException:
-        pass
-
-
-async def change_staff_role(ctx, member, target_role, action):
-    if target_role is None:
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} The specified or configured role could not be found in this server.", color=discord.Color.red()))
-        return
-
-    if member.id == ctx.author.id or member.id == ctx.guild.owner_id or target_role.is_default() or target_role.managed:
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} Action unauthorized or invalid role.", color=discord.Color.orange()))
-        return
-
-    try:
-        if action == "promote":
-            await member.add_roles(target_role, reason=f"Staff promotion by {ctx.author}")
-            result = "promoted"
-        else:
-            await member.remove_roles(target_role, reason=f"Staff demotion by {ctx.author}")
-            result = "demoted"
-
-        await send_promodemo_embed(ctx.guild, member, target_role, result, ctx.author)
-        await audit(ctx.guild, f"Staff {result}: {member} | Role: {target_role.name} | By: {ctx.author}")
-        emoji = EMOJIS['promo'] if result == "promoted" else EMOJIS['demo']
-        await ctx.reply(embed=discord.Embed(description=f"{emoji} {member.mention} was **{result}**: {target_role.mention}", color=discord.Color.green() if result == "promoted" else discord.Color.red()))
-    except discord.Forbidden:
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to modify roles.", color=discord.Color.red()))
-
-
-# =========================
-# STAFF TRAINING COMMANDS
-# =========================
 
 @bot.command(name="train")
 @commands.guild_only()
@@ -719,26 +755,36 @@ async def steal(ctx, emoji: str, name: str = None):
 
 
 # =========================
-# TICKET SETUP COMMAND
+# TICKET SETUP COMMAND (>sendticket)
 # =========================
 
-@bot.command(name="ticketsetup")
+@bot.command(name="sendticket")
 @commands.guild_only()
-async def ticketsetup(ctx):
-    """Deploys the persistent ticket creation panel."""
+async def sendticket(ctx, channel: discord.TextChannel = None):
+    """Deploys the persistent ticket selection dropdown panel to a channel."""
     if not user_is_supervisor(ctx):
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the owners or supervisors can set up tickets.", color=discord.Color.red()))
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only owners or supervisors can deploy the ticket panel.", color=discord.Color.red()))
         return
+
+    target_channel = channel or ctx.channel
 
     embed = discord.Embed(
         title=f"{EMOJIS['ticket']} Support Ticket Center",
-        description="Need assistance? Click the button below to open a private support ticket with our staff team.",
+        description=(
+            f"Welcome to the **{ctx.guild.name}** Support Center! {EMOJIS['shield']}\n\n"
+            f"Please select a category from the dropdown menu below to open a private ticket with our staff team:\n\n"
+            f"{EMOJIS['bullet']} {EMOJIS['support']} **Support** — General questions & assistance\n"
+            f"{EMOJIS['bullet']} {EMOJIS['report']} **Report** — Report users or rule breakers\n"
+            f"{EMOJIS['bullet']} {EMOJIS['promo']} **Giveaway Claim** — Claim won prizes\n"
+            f"{EMOJIS['bullet']} {EMOJIS['decomp']} **Decomp Use** — Decomp service requests"
+        ),
         color=discord.Color.blurple(),
         timestamp=discord.utils.utcnow()
     )
-    embed.set_footer(text="Faisal Mod • Support System")
+    embed.set_footer(text="Faisal Mod • Support System", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
 
-    await ctx.send(embed=embed, view=TicketSetupView())
+    await target_channel.send(embed=embed, view=TicketDropdownView())
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Successfully deployed ticket panel to {target_channel.mention}!", color=discord.Color.green()))
 
 
 # =========================
@@ -1199,7 +1245,7 @@ async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
-    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>ticketsetup`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`", inline=False)
     embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>staffsettings`", inline=False)
@@ -1212,8 +1258,8 @@ async def help_command(ctx):
 
 @bot.event
 async def on_ready():
-    bot.add_view(TicketSetupView())
-    bot.add_view(TicketCloseView())
+    bot.add_view(TicketDropdownView())
+    bot.add_view(TicketPanelActionsView())
     logging.info("Faisal Mod logged in as %s", bot.user)
 
 
