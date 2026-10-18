@@ -63,6 +63,9 @@ config = {
     "warnings": {},
     "trainings": {},
     "economy": {}
+    "economy": {},
+    "log_channels": {},
+    "economy_channels": {}
 }
 
 
@@ -160,6 +163,50 @@ async def audit(guild, message):
         await channel.send(message, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         logging.exception("Failed to send audit log")
+
+
+async def log_server_event(guild, title, description, color=discord.Color.blurple()):
+    """Send a server event as an embed to its configured logging channel."""
+    if guild is None:
+        return
+    channel_id = guild_setting("log_channels", guild.id)
+    if not channel_id:
+        return
+    channel = guild.get_channel(int(channel_id))
+    if channel is None:
+        return
+    embed = discord.Embed(
+        title=f"{EMOJIS['audit']} {title}",
+        description=(description or "No additional details.")[:4000],
+        color=color,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"{guild.name} • Server Event Log")
+    try:
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        logging.exception("Failed to send server event log")
+
+
+def economy_channel_allowed(ctx):
+    """Restrict all economy commands to the server's configured economy channel."""
+    economy_commands = {
+        "economy", "balance", "daily", "work", "beg", "crime", "deposit", "withdraw",
+        "pay", "leaderboard", "shop", "buy", "inventory", "sell", "bankupgrade", "rob",
+        "slots", "betflip", "addmoney", "removemoney", "setmoney", "addbank", "setbank",
+        "resetmoney", "reseteco"
+    }
+    if ctx.guild is None or ctx.command is None or ctx.command.name not in economy_commands:
+        return True
+    channel_id = guild_setting("economy_channels", ctx.guild.id)
+    return not channel_id or ctx.channel.id == int(channel_id)
+
+
+@bot.check
+async def enforce_economy_channel(ctx):
+    if economy_channel_allowed(ctx):
+        return True
+    raise commands.CheckFailure("Economy commands can only be used in the configured economy channel.")
 
 
 # =========================
@@ -1412,6 +1459,9 @@ async def bankupgrade(ctx):
 @commands.guild_only()
 async def rob(ctx, member: discord.Member):
     account = economy_account(ctx)
+    if OWNER_ID and member.id == OWNER_ID:
+        await ctx.reply(embed=economy_embed("Rob", f"{EMOJIS['shield']} The bot owner is protected from robbery.", discord.Color.orange()))
+        return
     if member.bot or member == ctx.author:
         await ctx.reply(embed=economy_embed("Rob", f"{EMOJIS['error']} Pick another server member.", discord.Color.red()))
         return
@@ -1741,6 +1791,30 @@ async def setaudit(ctx, channel: discord.TextChannel):
     await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Audit channel set to {channel.mention}.", color=discord.Color.green()))
 
 
+@bot.command(name="setlogchan")
+@commands.guild_only()
+async def setlogchan(ctx, channel: discord.TextChannel):
+    """Sets the channel for server event embed logs."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+    config.setdefault("log_channels", {})[str(ctx.guild.id)] = channel.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Server event logs will be sent to {channel.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setecochan")
+@commands.guild_only()
+async def setecochan(ctx, channel: discord.TextChannel):
+    """Restricts economy commands to the selected channel."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+    config.setdefault("economy_channels", {})[str(ctx.guild.id)] = channel.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Economy commands can now only be used in {channel.mention}.", color=discord.Color.green()))
+
+
 @bot.command(name="staffsettings")
 @commands.guild_only()
 async def staffsettings(ctx):
@@ -1817,6 +1891,7 @@ async def help_command(ctx):
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`, `>slots <bet>`, `>betflip <heads/tails> <bet>`", inline=False)
     embed.add_field(name=f"{EMOJIS['purchase']} Economy", value="`>economy` for the full list: balance, daily, work, beg, crime, deposit, withdraw, pay, leaderboard, shop, buy, sell, inventory, bankupgrade, rob, slots, betflip", inline=False)
     embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>staffsettings`", inline=False)
+    embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>setlogchan #channel`, `>setecochan #channel`, `>staffsettings`", inline=False)
     await ctx.reply(embed=embed, mention_author=False)
 
 
@@ -1832,10 +1907,240 @@ async def on_ready():
 
 
 @bot.event
+async def on_message(message):
+    if message.guild and message.author.id != (bot.user.id if bot.user else None):
+        text_content = message.content or "[No text content]"
+        await log_server_event(
+            message.guild,
+            "Message Sent",
+            f"**Author:** {message.author.mention} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n**Content:**\n{text_content[:3000]}",
+            discord.Color.blurple()
+        )
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.guild and after.author.id != (bot.user.id if bot.user else None) and before.content != after.content:
+        await log_server_event(
+            after.guild,
+            "Message Edited",
+            f"**Author:** {after.author.mention} (`{after.author.id}`)\n"
+            f"**Channel:** {after.channel.mention}\n**Before:**\n{(before.content or '[No text content]')[:1300]}\n"
+            f"**After:**\n{(after.content or '[No text content]')[:1300]}\n[Jump to message]({after.jump_url})",
+            discord.Color.orange()
+        )
+
+
+@bot.event
+async def on_message_delete(message):
+    if message.guild and message.author.id != (bot.user.id if bot.user else None):
+        await log_server_event(
+            message.guild,
+            "Message Deleted",
+            f"**Author:** {message.author.mention} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n**Content:**\n{(message.content or '[No text content]')[:3000]}",
+            discord.Color.red()
+        )
+
+
+@bot.event
+async def on_raw_message_delete(payload):
+    if payload.cached_message is None and payload.guild_id:
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Message Deleted (Not Cached)",
+            f"A message was deleted in {channel.mention if channel else f'<#{payload.channel_id}>'}.\n"
+            f"**Message ID:** `{payload.message_id}`\nMessage content was unavailable because it was not cached.",
+            discord.Color.red()
+        )
+
+
+@bot.event
+async def on_member_join(member):
+    await log_server_event(member.guild, "Member Joined", f"{member.mention} (`{member.id}`) joined the server.", discord.Color.green())
+
+
+@bot.event
+async def on_member_remove(member):
+    await log_server_event(member.guild, "Member Left", f"**Member:** {member} (`{member.id}`)", discord.Color.orange())
+
+
+@bot.event
+async def on_member_update(before, after):
+    changes = []
+    if before.nick != after.nick:
+        changes.append(f"**Nickname:** `{before.nick or before.name}` → `{after.nick or after.name}`")
+    old_roles = {role.id: role for role in before.roles}
+    new_roles = {role.id: role for role in after.roles}
+    added = [role.mention for role_id, role in new_roles.items() if role_id not in old_roles]
+    removed = [role.mention for role_id, role in old_roles.items() if role_id not in new_roles]
+    if added:
+        changes.append("**Roles added:** " + ", ".join(added))
+    if removed:
+        changes.append("**Roles removed:** " + ", ".join(removed))
+    if changes:
+        await log_server_event(after.guild, "Member Updated", f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_member_ban(guild, user):
+    await log_server_event(guild, "Member Banned", f"**User:** {user} (`{user.id}`)", discord.Color.red())
+
+
+@bot.event
+async def on_member_unban(guild, user):
+    await log_server_event(guild, "Member Unbanned", f"**User:** {user} (`{user.id}`)", discord.Color.green())
+
+
+@bot.event
+async def on_guild_channel_create(channel):
+    mention = channel.mention if hasattr(channel, "mention") else channel.name
+    await log_server_event(channel.guild, "Channel Created", f"**Channel:** {mention}\n**Type:** {type(channel).__name__}", discord.Color.green())
+
+
+@bot.event
+async def on_guild_channel_delete(channel):
+    await log_server_event(channel.guild, "Channel Deleted", f"**Channel:** #{channel.name} (`{channel.id}`)\n**Type:** {type(channel).__name__}", discord.Color.red())
+
+
+@bot.event
+async def on_guild_channel_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Name:** `{before.name}` → `{after.name}`")
+    if hasattr(before, "topic") and before.topic != after.topic:
+        changes.append(f"**Topic:** `{before.topic or 'None'}` → `{after.topic or 'None'}`")
+    if hasattr(before, "slowmode_delay") and before.slowmode_delay != after.slowmode_delay:
+        changes.append(f"**Slowmode:** `{before.slowmode_delay}s` → `{after.slowmode_delay}s`")
+    if before.category_id != after.category_id:
+        changes.append(f"**Category:** `{before.category}` → `{after.category}`")
+    if changes:
+        mention = after.mention if hasattr(after, "mention") else after.name
+        await log_server_event(after.guild, "Channel Updated", f"**Channel:** {mention}\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_guild_role_create(role):
+    await log_server_event(role.guild, "Role Created", f"**Role:** {role.mention} (`{role.id}`)", discord.Color.green())
+
+
+@bot.event
+async def on_guild_role_delete(role):
+    await log_server_event(role.guild, "Role Deleted", f"**Role:** {role.name} (`{role.id}`)", discord.Color.red())
+
+
+@bot.event
+async def on_guild_role_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Name:** `{before.name}` → `{after.name}`")
+    if before.permissions != after.permissions:
+        changes.append("**Permissions:** changed")
+    if before.color != after.color:
+        changes.append(f"**Color:** `{before.color}` → `{after.color}`")
+    if before.hoist != after.hoist or before.mentionable != after.mentionable:
+        changes.append(f"**Display settings:** hoist `{before.hoist}` → `{after.hoist}`, mentionable `{before.mentionable}` → `{after.mentionable}`")
+    if changes:
+        await log_server_event(after.guild, "Role Updated", f"**Role:** {after.mention} (`{after.id}`)\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    old_channel = before.channel.name if before.channel else "Not in voice"
+    new_channel = after.channel.name if after.channel else "Not in voice"
+    if before.channel == after.channel and before.self_mute == after.self_mute and before.mute == after.mute and before.self_deaf == after.self_deaf and before.deaf == after.deaf and before.self_stream == after.self_stream and before.self_video == after.self_video:
+        return
+    await log_server_event(member.guild, "Voice State Updated", f"**Member:** {member.mention}\n**Voice channel:** `{old_channel}` → `{new_channel}`\nMute, deaf, stream, or camera state changed.", discord.Color.blurple())
+
+
+@bot.event
+async def on_guild_emojis_update(guild, before, after):
+    old_emojis = {emoji.id: emoji for emoji in before}
+    new_emojis = {emoji.id: emoji for emoji in after}
+    added = [str(emoji) for emoji_id, emoji in new_emojis.items() if emoji_id not in old_emojis]
+    removed = [emoji.name for emoji_id, emoji in old_emojis.items() if emoji_id not in new_emojis]
+    changes = []
+    if added:
+        changes.append("**Added:** " + " ".join(added))
+    if removed:
+        changes.append("**Removed:** " + ", ".join(removed))
+    if changes:
+        await log_server_event(guild, "Custom Emojis Updated", "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_invite_create(invite):
+    channel = invite.channel.mention if invite.channel else "Unknown"
+    await log_server_event(invite.guild, "Invite Created", f"**Code:** `{invite.code}`\n**Channel:** {channel}\n**Created by:** {invite.inviter or 'Unknown'}", discord.Color.green())
+
+
+@bot.event
+async def on_invite_delete(invite):
+    channel = invite.channel.mention if invite.channel else "Unknown"
+    await log_server_event(invite.guild, "Invite Deleted", f"**Code:** `{invite.code}`\n**Channel:** {channel}", discord.Color.orange())
+
+
+@bot.event
+async def on_webhooks_update(channel):
+    await log_server_event(channel.guild, "Webhooks Updated", f"Webhook configuration changed in {channel.mention}.", discord.Color.orange())
+
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.guild_id and payload.user_id != (bot.user.id if bot.user else None):
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Reaction Added",
+            f"**User:** <@{payload.user_id}>\n**Channel:** {channel.mention if channel else f'<#{payload.channel_id}>'}\n"
+            f"**Emoji:** {payload.emoji}\n**Message ID:** `{payload.message_id}`",
+            discord.Color.green()
+        )
+
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    if payload.guild_id and payload.user_id != (bot.user.id if bot.user else None):
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Reaction Removed",
+            f"**User:** <@{payload.user_id}>\n**Channel:** {channel.mention if channel else f'<#{payload.channel_id}>'}\n"
+            f"**Emoji:** {payload.emoji}\n**Message ID:** `{payload.message_id}`",
+            discord.Color.orange()
+        )
+
+
+@bot.event
+async def on_guild_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Server name:** `{before.name}` → `{after.name}`")
+    if before.icon != after.icon:
+        changes.append("**Server icon:** changed")
+    if before.verification_level != after.verification_level:
+        changes.append(f"**Verification level:** `{before.verification_level}` → `{after.verification_level}`")
+    if before.description != after.description:
+        changes.append("**Server description:** changed")
+    if changes:
+        await log_server_event(after, "Server Settings Updated", "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     if isinstance(error, commands.CheckFailure):
+        if not economy_channel_allowed(ctx):
+            channel_id = guild_setting("economy_channels", ctx.guild.id)
+            await ctx.reply(embed=economy_embed("Wrong Channel", f"{EMOJIS['warning']} Economy commands are only available in <#{channel_id}>.", discord.Color.orange()))
+            return
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
         return
     
