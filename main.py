@@ -1486,8 +1486,147 @@ async def betflip(ctx, choice: str, bet: int):
 @bot.command(name="economy")
 @commands.guild_only()
 async def economy_help(ctx):
-    embed = economy_embed("Economy Commands", "`>balance [@member]` · `>daily` · `>work` · `>beg` · `>crime`\n`>deposit <amount/all>` · `>withdraw <amount/all>` · `>pay @member <amount>`\n`>leaderboard` · `>shop` · `>buy <item>` · `>sell <item>` · `>inventory [@member]`\n`>bankupgrade` · `>rob @member` · `>slots <bet>` · `>betflip <heads/tails> <bet>\n\n" + f"All balances are saved per server. Currency: {ECONOMY_EMOJI}")
+    description = (
+        "`>balance [@member]` · `>daily` · `>work` · `>beg` · `>crime`\n"
+        "`>deposit <amount/all>` · `>withdraw <amount/all>` · `>pay @member <amount>`\n"
+        "`>leaderboard` · `>shop` · `>buy <item>` · `>sell <item>` · `>inventory [@member]`\n"
+        "`>bankupgrade` · `>rob @member` · `>slots <bet>` · `>betflip <heads/tails> <bet>`\n\n"
+        f"All balances are saved per server. Currency: {ECONOMY_EMOJI}"
+    )
+    if OWNER_ID and ctx.author.id == OWNER_ID:
+        description += (
+            "\n\n**Bot owner (per-server):** `>addmoney @member <amount> [wallet/bank]` · "
+            "`>removemoney @member <amount> [wallet/bank]` · `>setmoney @member <amount> [wallet/bank]` · "
+            "`>resetmoney @member` · `>addbank @member <amount>` · `>setbank @member <amount>` · `>reseteco @member`"
+        )
+    embed = economy_embed("Economy Commands", description)
     await ctx.reply(embed=embed)
+
+
+def is_bot_owner(ctx):
+    return bool(OWNER_ID) and ctx.author.id == OWNER_ID
+
+
+async def owner_economy_reply(ctx, title, description, color=discord.Color.green()):
+    await ctx.reply(embed=economy_embed(title, description, color))
+
+
+@bot.command(name="addmoney", aliases=["addcash"])
+@commands.guild_only()
+async def addmoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: add coins to a member's wallet or bank in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>addmoney @member <positive amount> [wallet/bank]`.", discord.Color.orange())
+        return
+    if pocket == "bank" and account["bank"] + amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"That exceeds the member's bank limit of **{economy_bank_limit(account):,}**.", discord.Color.orange())
+        return
+    account[pocket] += amount
+    save_config()
+    await owner_economy_reply(ctx, "Money Added", f"{EMOJIS['success']} Added **{amount:,} coins** to {member.mention}'s {pocket}.")
+
+
+@bot.command(name="removemoney", aliases=["takemoney", "removecash"])
+@commands.guild_only()
+async def removemoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: remove coins from a member's wallet or bank in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>removemoney @member <positive amount> [wallet/bank]`.", discord.Color.orange())
+        return
+    removed = min(amount, account[pocket])
+    account[pocket] -= removed
+    save_config()
+    await owner_economy_reply(ctx, "Money Removed", f"Removed **{removed:,} coins** from {member.mention}'s {pocket}.")
+
+
+@bot.command(name="setmoney", aliases=["setcash"])
+@commands.guild_only()
+async def setmoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: set a member's wallet or bank balance in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount < 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>setmoney @member <amount of 0 or more> [wallet/bank]`.", discord.Color.orange())
+        return
+    if pocket == "bank" and amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"The bank limit is **{economy_bank_limit(account):,}**. Upgrade the account or set its wallet instead.", discord.Color.orange())
+        return
+    account[pocket] = amount
+    save_config()
+    await owner_economy_reply(ctx, "Balance Set", f"Set {member.mention}'s {pocket} to **{amount:,} coins**.")
+
+
+@bot.command(name="addbank")
+@commands.guild_only()
+async def addbank(ctx, member: discord.Member, amount: int):
+    """Bot owner: add coins directly to a member's bank, respecting its capacity."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or account["bank"] + amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"Enter a positive amount that fits the remaining **{economy_bank_limit(account) - account['bank']:,}** bank capacity.", discord.Color.orange())
+        return
+    account["bank"] += amount
+    save_config()
+    await owner_economy_reply(ctx, "Bank Funds Added", f"Added **{amount:,} coins** to {member.mention}'s bank.")
+
+
+@bot.command(name="setbank")
+@commands.guild_only()
+async def setbank(ctx, member: discord.Member, amount: int):
+    """Bot owner: set a member's bank balance without exceeding its capacity."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    if amount < 0 or amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"Choose an amount from 0 to **{economy_bank_limit(account):,}**.", discord.Color.orange())
+        return
+    account["bank"] = amount
+    save_config()
+    await owner_economy_reply(ctx, "Bank Set", f"Set {member.mention}'s bank to **{amount:,} coins**.")
+
+
+@bot.command(name="resetmoney", aliases=["clearmoney"])
+@commands.guild_only()
+async def resetmoney(ctx, member: discord.Member):
+    """Bot owner: clear a member's wallet and bank balances in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    account["wallet"] = 0
+    account["bank"] = 0
+    save_config()
+    await owner_economy_reply(ctx, "Balances Cleared", f"Cleared {member.mention}'s wallet and bank. Inventory and cooldowns were kept.", discord.Color.orange())
+
+
+@bot.command(name="reseteco", aliases=["resetaccount"])
+@commands.guild_only()
+async def reseteco(ctx, member: discord.Member):
+    """Bot owner: reset a member's entire economy account in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    config.setdefault("economy", {}).setdefault(str(ctx.guild.id), {})[str(member.id)] = {
+        "wallet": 0, "bank": 0, "bank_level": 0, "inventory": [], "cooldowns": {}
+    }
+    save_config()
+    await owner_economy_reply(ctx, "Account Reset", f"Reset {member.mention}'s complete economy account in this server.", discord.Color.orange())
 
 @bot.group(invoke_without_command=True)
 @commands.guild_only()
