@@ -54,6 +54,8 @@ EMOJIS = {
 
 config = {
     "supervisor_roles": {},
+    "staff_roles": {},
+    "ticket_categories": {},
     "promodemo_channels": {},
     "audit_channels": {},
     "rank_ladders": {},
@@ -110,6 +112,9 @@ def user_is_supervisor(ctx):
 
 def user_is_staff(ctx):
     if user_is_supervisor(ctx) or ctx.author.guild_permissions.kick_members:
+        return True
+    staff_role_id = guild_setting("staff_roles", ctx.guild.id)
+    if staff_role_id and any(r.id == int(staff_role_id) for r in ctx.author.roles):
         return True
     return any("staff" in r.name.lower() or "trial" in r.name.lower() or "mod" in r.name.lower() for r in ctx.author.roles)
 
@@ -174,8 +179,9 @@ class TicketPanelActionsView(discord.ui.View):
         button.label = f"Claimed by {interaction.user.name}"
         button.style = discord.ButtonStyle.secondary
 
-        staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), interaction.guild.roles)
-        ping_target = staff_team_role.mention if staff_team_role else ""
+        staff_role_id = guild_setting("staff_roles", interaction.guild.id)
+        staff_role = interaction.guild.get_role(int(staff_role_id)) if staff_role_id else discord.utils.find(lambda r: "staff team" in r.name.lower(), interaction.guild.roles)
+        ping_target = staff_role.mention if staff_role else ""
 
         await interaction.response.edit_message(view=self)
         await interaction.channel.send(f"{EMOJIS['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
@@ -194,8 +200,11 @@ class TicketPanelActionsView(discord.ui.View):
 def user_is_staff_interaction(interaction):
     if interaction.user.guild_permissions.kick_members:
         return True
-    role_id = guild_setting("supervisor_roles", interaction.guild.id)
-    if role_id and any(r.id == int(role_id) for r in interaction.user.roles):
+    sup_role_id = guild_setting("supervisor_roles", interaction.guild.id)
+    if sup_role_id and any(r.id == int(sup_role_id) for r in interaction.user.roles):
+        return True
+    staff_role_id = guild_setting("staff_roles", interaction.guild.id)
+    if staff_role_id and any(r.id == int(staff_role_id) for r in interaction.user.roles):
         return True
     return any("staff" in r.name.lower() or "trial" in r.name.lower() or "mod" in r.name.lower() for r in interaction.user.roles)
 
@@ -232,11 +241,13 @@ class TicketSelect(discord.ui.Select):
             if sup_role:
                 overwrites[sup_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
-        staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), guild.roles)
-        if staff_team_role:
-            overwrites[staff_team_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        staff_role_id = guild_setting("staff_roles", guild.id)
+        staff_role = guild.get_role(int(staff_role_id)) if staff_role_id else discord.utils.find(lambda r: "staff team" in r.name.lower(), guild.roles)
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
-        category = discord.utils.get(guild.categories, name="Support Tickets")
+        cat_id = guild_setting("ticket_categories", guild.id)
+        category = guild.get_channel(int(cat_id)) if cat_id else discord.utils.get(guild.categories, name="Support Tickets")
         if not category:
             category = await guild.create_category("Support Tickets")
 
@@ -255,7 +266,7 @@ class TicketSelect(discord.ui.Select):
         )
         embed.set_footer(text="Faisal Mod • Ticket System")
 
-        await channel.send(content=staff_team_role.mention if staff_team_role else "", embed=embed, view=TicketPanelActionsView())
+        await channel.send(content=staff_role.mention if staff_role else "", embed=embed, view=TicketPanelActionsView())
         await interaction.response.send_message(f"{EMOJIS['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
         await audit(guild, f"Ticket created ({category_name}) by {member} ({member.id}) | Channel: {channel.name}")
 
@@ -755,7 +766,7 @@ async def steal(ctx, emoji: str, name: str = None):
 
 
 # =========================
-# TICKET SETUP COMMAND (>sendticket)
+# TICKET SETUP COMMANDS
 # =========================
 
 @bot.command(name="sendticket")
@@ -785,6 +796,38 @@ async def sendticket(ctx, channel: discord.TextChannel = None):
 
     await target_channel.send(embed=embed, view=TicketDropdownView())
     await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Successfully deployed ticket panel to {target_channel.mention}!", color=discord.Color.green()))
+
+
+@bot.command(name="setstaffrole")
+@commands.guild_only()
+async def setstaffrole(ctx, role: discord.Role):
+    """Sets the staff role that can view, claim, and get pinged in tickets."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    if "staff_roles" not in config:
+        config["staff_roles"] = {}
+    config["staff_roles"][str(ctx.guild.id)] = role.id
+    save_config()
+
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Ticket staff role set to {role.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setcategory")
+@commands.guild_only()
+async def setcategory(ctx, category: discord.CategoryChannel):
+    """Sets the category where new tickets are created."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    if "ticket_categories" not in config:
+        config["ticket_categories"] = {}
+    config["ticket_categories"][str(ctx.guild.id)] = category.id
+    save_config()
+
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Ticket creation category set to **{category.name}**.", color=discord.Color.green()))
 
 
 # =========================
@@ -1190,11 +1233,13 @@ async def staffsettings(ctx):
         return
 
     supervisor_id = guild_setting("supervisor_roles", ctx.guild.id)
+    staff_role_id = guild_setting("staff_roles", ctx.guild.id)
     promo_id = guild_setting("promodemo_channels", ctx.guild.id)
     audit_id = guild_setting("audit_channels", ctx.guild.id)
     ladder = config.get("rank_ladders", {}).get(str(ctx.guild.id), [])
 
     supervisor = ctx.guild.get_role(int(supervisor_id)) if supervisor_id else None
+    staff_role = ctx.guild.get_role(int(staff_role_id)) if staff_role_id else None
     promo_channel = ctx.guild.get_channel(int(promo_id)) if promo_id else None
     audit_channel = ctx.guild.get_channel(int(audit_id)) if audit_id else None
     
@@ -1209,6 +1254,11 @@ async def staffsettings(ctx):
     embed.add_field(
         name=f"{EMOJIS['shield']} Supervisor Role",
         value=supervisor.mention if supervisor else "Not configured (`>setstaffsupervisor @role`)",
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['shield']} Ticket Staff Role",
+        value=staff_role.mention if staff_role else "Not configured (`>setstaffrole @role`)",
         inline=False
     )
     embed.add_field(
@@ -1245,7 +1295,7 @@ async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
-    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory #category`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`", inline=False)
     embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>staffsettings`", inline=False)
