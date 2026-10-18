@@ -62,11 +62,14 @@ config = {
     "staff_limits": {},
     "warnings": {},
     "trainings": {},
-    "economy": {},
+    "economy": {}
     "economy": {},
     "log_channels": {},
+    "log_webhooks": {},
     "economy_channels": {}
 }
+
+LOG_WEBHOOKS = {}
 
 
 def load_config():
@@ -183,9 +186,21 @@ async def log_server_event(guild, title, description, color=discord.Color.blurpl
     )
     embed.set_footer(text=f"{guild.name} • Server Event Log")
     try:
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        webhook_id = config.setdefault("log_webhooks", {}).get(str(guild.id))
+        webhook = LOG_WEBHOOKS.get(guild.id)
+        if webhook is None:
+            webhooks = await channel.webhooks()
+            webhook = discord.utils.get(webhooks, id=int(webhook_id)) if webhook_id else None
+            if webhook is None:
+                webhook = discord.utils.find(lambda item: item.name == "Faisal Event Logs", webhooks)
+            if webhook is None:
+                webhook = await channel.create_webhook(name="Faisal Event Logs", reason="Server event embed logging")
+            config["log_webhooks"][str(guild.id)] = webhook.id
+            save_config()
+            LOG_WEBHOOKS[guild.id] = webhook
+        await webhook.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
-        logging.exception("Failed to send server event log")
+        logging.exception("Failed to send server event log through webhook")
 
 
 def economy_channel_allowed(ctx):
@@ -1798,7 +1813,21 @@ async def setlogchan(ctx, channel: discord.TextChannel):
     if not user_is_owner(ctx):
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
         return
+    try:
+        existing_hooks = await channel.webhooks()
+        webhook = discord.utils.find(lambda item: item.name == "Faisal Event Logs", existing_hooks)
+        if webhook is None:
+            webhook = await channel.create_webhook(name="Faisal Event Logs", reason=f"Configured by {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I need Manage Webhooks permission to set up event logging in that channel.", color=discord.Color.red()))
+        return
+    except discord.HTTPException:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I couldn't create or find a logging webhook in that channel.", color=discord.Color.red()))
+        return
+
     config.setdefault("log_channels", {})[str(ctx.guild.id)] = channel.id
+    config.setdefault("log_webhooks", {})[str(ctx.guild.id)] = webhook.id
+    LOG_WEBHOOKS[ctx.guild.id] = webhook
     save_config()
     await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Server event logs will be sent to {channel.mention}.", color=discord.Color.green()))
 
@@ -1908,15 +1937,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    if message.guild and message.author.id != (bot.user.id if bot.user else None):
-        text_content = message.content or "[No text content]"
-        await log_server_event(
-            message.guild,
-            "Message Sent",
-            f"**Author:** {message.author.mention} (`{message.author.id}`)\n"
-            f"**Channel:** {message.channel.mention}\n**Content:**\n{text_content[:3000]}",
-            discord.Color.blurple()
-        )
+    # Message creation is intentionally not logged to avoid high-volume log spam.
     await bot.process_commands(message)
 
 
