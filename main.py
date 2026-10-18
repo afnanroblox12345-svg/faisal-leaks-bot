@@ -223,7 +223,11 @@ class TicketSelect(discord.ui.Select):
         member = interaction.user
         category_name = self.values[0]
 
-        existing_channel = discord.utils.get(guild.text_channels, name=f"ticket-{member.name.lower()}")
+        # Check if user already has a ticket open containing their username
+        existing_channel = discord.utils.get(guild.text_channels, name=f"-{member.name.lower()}-")
+        if not existing_channel:
+            existing_channel = discord.utils.find(lambda c: f"-{member.name.lower()}-" in c.name, guild.text_channels)
+            
         if existing_channel:
             await interaction.response.send_message(f"{EMOJIS['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
             return
@@ -245,9 +249,9 @@ class TicketSelect(discord.ui.Select):
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
-        # Retrieve specific category configured for this ticket type
-        categories_dict = config.get("ticket_categories", {}).get(str(guild.id), {})
-        cat_id = categories_dict.get(category_name.lower())
+        # Fetch category mapping
+        cat_data = config.get("ticket_categories", {}).get(str(guild.id), {})
+        cat_id = cat_data.get(category_name.lower()) if isinstance(cat_data, dict) else None
         
         category = guild.get_channel(int(cat_id)) if cat_id else None
         if not category:
@@ -255,8 +259,16 @@ class TicketSelect(discord.ui.Select):
         if not category:
             category = await guild.create_category("Support Tickets")
 
+        # Calculate next ticket number based on existing channels in the guild
+        existing_tickets = [c for c in guild.text_channels if "-" in c.name and c.name.split("-")[0].isdigit()]
+        ticket_number = len(existing_tickets) + 1
+
+        # Format: (ticket number)-(username)-(ticket category name) -> e.g. 1-silent-support
+        clean_username = "".join(c for c in member.name.lower() if c.isalnum() or c in "-_")
+        channel_name = f"{ticket_number}-{clean_username}-{category_name.lower()}"
+
         channel = await guild.create_text_channel(
-            name=f"ticket-{member.name}",
+            name=channel_name,
             category=category,
             overwrites=overwrites,
             topic=f"Category: {category_name} | Ticket for {member} ({member.id})"
@@ -469,7 +481,7 @@ async def train(ctx, trainee: discord.Member):
 
     view = TrainingControlView(trainee_id=trainee.id, trainer_id=ctx.author.id)
     await ctx.send(embed=embed, view=view)
-    await audit(ctx.guild, f"Staff Training Started: {trainee} ({trainee.id}) by {ctx.author}")
+    await audit(interaction=ctx.guild, message=f"Staff Training Started: {trainee} ({trainee.id}) by {ctx.author}")
 
 
 @bot.command(name="trainings")
@@ -831,9 +843,10 @@ async def setcategory(ctx, ticket_type: str, category: discord.CategoryChannel):
         return
 
     guild_id = str(ctx.guild.id)
-    if "ticket_categories" not in config:
+    if "ticket_categories" not in config or not isinstance(config["ticket_categories"], dict):
         config["ticket_categories"] = {}
-    if guild_id not in config["ticket_categories"]:
+    
+    if guild_id not in config["ticket_categories"] or not isinstance(config["ticket_categories"][guild_id], dict):
         config["ticket_categories"][guild_id] = {}
 
     config["ticket_categories"][guild_id][ticket_type] = category.id
