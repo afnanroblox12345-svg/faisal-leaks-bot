@@ -62,7 +62,7 @@ config = {
     "staff_limits": {},
     "warnings": {},
     "trainings": {},
-    "economy": {}
+    "economy": {},
     "economy": {},
     "log_channels": {},
     "economy_channels": {}
