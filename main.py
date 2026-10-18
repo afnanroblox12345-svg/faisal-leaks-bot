@@ -1844,6 +1844,34 @@ async def setecochan(ctx, channel: discord.TextChannel):
     await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Economy commands can now only be used in {channel.mention}.", color=discord.Color.green()))
 
 
+@bot.command(name="anc")
+@commands.guild_only()
+async def anc(ctx):
+    """Bot owner: announce custom bot commissions with the ticket selector."""
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['purchase']} Get a Custom Discord Bot",
+        description=(
+            "Need a custom bot for your server? I build Discord bots tailored to your needs, "
+            "including moderation, economy, tickets, and custom features.\n\n"
+            f"{EMOJIS['bullet']} Click the menu below and select **Purchase** to create a ticket.\n"
+            f"{EMOJIS['bullet']} Tell me what features you want, and we can discuss your bot."
+        ),
+        color=discord.Color.blurple(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"{ctx.guild.name} • Custom Bot Orders")
+    await ctx.send(
+        content="@everyone",
+        embed=embed,
+        view=TicketDropdownView(),
+        allowed_mentions=discord.AllowedMentions(everyone=True, users=False, roles=False)
+    )
+
+
 @bot.command(name="staffsettings")
 @commands.guild_only()
 async def staffsettings(ctx):
@@ -1914,6 +1942,7 @@ async def staffsettings(ctx):
 async def help_command(ctx):
     embed = discord.Embed(title=f"{EMOJIS['gear']} Faisal Mod • Command Center", description="Here are all available command modules:", color=discord.Color.blurple())
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`", inline=False)
+    embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
     embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory <support/purchase/partnership> #category`", inline=False)
     embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
