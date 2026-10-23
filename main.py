@@ -93,6 +93,9 @@ config = {
     "economy": {},
     "log_channels": {},
     "log_webhooks": {},
+    "economy_channels": {}
+    ,"disabled_commands": {}
+    ,"maintenance": {"enabled": False}
     "economy_channels": {},
     "disabled_commands": {},
     "maintenance": {"enabled": False},
@@ -160,9 +163,11 @@ def render_server_emojis(guild, text):
     uploaded = config.get("uploaded_emojis", {}).get(str(guild.id), {})
     for key, source_markup in EMOJIS.items():
         uploaded_id = uploaded.get(key)
-        if not uploaded_id:
-            continue
-        emoji = discord.utils.get(guild.emojis, id=int(uploaded_id))
+        emoji = discord.utils.get(guild.emojis, id=int(uploaded_id)) if uploaded_id else None
+        if emoji is None:
+            match = re.fullmatch(r"<a?:([A-Za-z0-9_]+):\d+>", source_markup)
+            if match:
+                emoji = discord.utils.get(guild.emojis, name=match.group(1))
         if emoji:
             text = text.replace(source_markup, str(emoji))
     return text
@@ -252,8 +257,10 @@ async def log_server_event(guild, title, description, color=THEME_BLUE):
             webhooks = await channel.webhooks()
             webhook = discord.utils.get(webhooks, id=int(webhook_id)) if webhook_id else None
             if webhook is None:
+                webhook = discord.utils.find(lambda item: item.name == "Faisal Event Logs", webhooks)
                 webhook = discord.utils.find(lambda item: item.name == "SLS Helper Event Logs", webhooks)
             if webhook is None:
+                webhook = await channel.create_webhook(name="Faisal Event Logs", reason="Server event embed logging")
                 webhook = await channel.create_webhook(name="SLS Helper Event Logs", reason="Server event embed logging")
             config["log_webhooks"][str(guild.id)] = webhook.id
             save_config()
@@ -352,6 +359,9 @@ def economy_channel_allowed(ctx):
 
 @bot.check
 async def enforce_economy_channel(ctx):
+    if economy_channel_allowed(ctx):
+        return True
+    raise commands.CheckFailure("Economy commands can only be used in the configured economy channel.")
     is_owner = is_bot_owner(ctx)
     if not is_owner and config.get("maintenance", {}).get("enabled", False):
         raise commands.CheckFailure("SLS Helper is currently in maintenance mode.")
@@ -1708,6 +1718,10 @@ async def economy_help(ctx):
     await ctx.reply(embed=embed)
 
 
+def is_bot_owner(ctx):
+    return bool(OWNER_ID) and ctx.author.id == OWNER_ID
+
+
 async def owner_economy_reply(ctx, title, description, color=discord.Color.green()):
     await ctx.reply(embed=economy_embed(title, description, color))
 
@@ -1950,8 +1964,10 @@ async def setlogchan(ctx, channel: discord.TextChannel):
         return
     try:
         existing_hooks = await channel.webhooks()
+        webhook = discord.utils.find(lambda item: item.name == "Faisal Event Logs", existing_hooks)
         webhook = discord.utils.find(lambda item: item.name == "SLS Helper Event Logs", existing_hooks)
         if webhook is None:
+            webhook = await channel.create_webhook(name="Faisal Event Logs", reason=f"Configured by {ctx.author}")
             webhook = await channel.create_webhook(name="SLS Helper Event Logs", reason=f"Configured by {ctx.author}")
     except discord.Forbidden:
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I need Manage Webhooks permission to set up event logging in that channel.", color=discord.Color.red()))
@@ -2186,6 +2202,14 @@ async def staffsettings(ctx):
 @bot.command(name="help")
 async def help_command(ctx):
     e = lambda key: guild_emoji(ctx.guild, key)
+    embed = discord.Embed(title=f"{EMOJIS['gear']} SLS Helper • Command Center", description="Here are all available command modules:", color=THEME_BLUE)
+    embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
+    embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory <support/purchase/partnership> #category`", inline=False)
+    embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
+    embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`, `>slots <bet>`, `>betflip <heads/tails> <bet>`", inline=False)
+    embed.add_field(name=f"{EMOJIS['purchase']} Economy", value="`>economy` for the full list: balance, daily, work, beg, crime, deposit, withdraw, pay, leaderboard, shop, buy, sell, inventory, bankupgrade, rob, slots, betflip", inline=False)
+    embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>setlogchan #channel`, `>setecochan #channel`, `>staffsettings`", inline=False)
     embed = discord.Embed(title=f"{e('gear')} SLS Helper • Command Center", description="Here are all available command modules:", color=THEME_BLUE)
     embed.add_field(name=f"{e('shield')} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
     embed.add_field(name=f"{e('warning')} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
@@ -2458,6 +2482,7 @@ async def on_command_error(ctx, error):
             return
         if not economy_channel_allowed(ctx):
             channel_id = guild_setting("economy_channels", ctx.guild.id)
+            await ctx.reply(embed=economy_embed("Wrong Channel", f"{EMOJIS['warning']} Economy commands are only available in <#{channel_id}>.", discord.Color.orange()))
             await ctx.reply(embed=economy_embed("Wrong Channel", f"{EMOJIS['warning']} Economy commands are only available in <#{channel_id}>.", THEME_BLUE))
             return
         await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
