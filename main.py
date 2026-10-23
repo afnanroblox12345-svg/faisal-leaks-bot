@@ -51,7 +51,7 @@ class EmojiContext(commands.Context):
 bot = commands.Bot(
     command_prefix=">",
     intents=intents,
-    activity=discord.Game(name="Super League Stars • Made by Afnan the GOAT"),
+    activity=discord.Game(name="Super League Stars"),
     context_class=EmojiContext,
     help_command=None
 )
@@ -61,23 +61,23 @@ bot = commands.Bot(
 # =========================
 
 EMOJIS = {
-    "promo": "<a:giveaway:1561077598791016591>",
-    "demo": "<:angry:1561078014895329331>",
-    "shield": "<:z_mod_DiscordShield:1561078954519961622>",
-    "gear": "<:Settings:1561077371895943319>",
-    "ladder": "<:16400redswordrankicon:1561077871206989845>",
-    "announcement": "<:announcement:1561079523641004162>",
-    "audit": "<a:a7_book:1561077741716111362>",
-    "success": "<a:MW_tick:1561077516905484448>",
-    "warning": "<a:03_awarndns:1561077438816194632>",
-    "error": "<a:error:1561078063968686081>",
-    "user": "<:ntl_user:1561077921395904653>",
-    "bullet": "<:MW_arrow_right:1561077250638610563>",
-    "welcome": "<a:wel:1561077660648738876>",
-    "ticket": "<:ticket:1560983848345665637>",
-    "support": "<:Support:1561328482724614238>",
-    "purchase": "<a:decomp:1561328437057032222>",
-    "partner": "<:Partner:1561337139373932593>"
+    "promo": "<a:giveaway:1563258803770753204>",
+    "demo": "<:angry:1563252045899898950>",
+    "shield": "<:z_mod_DiscordShield:1563259179328868413>",
+    "gear": "<:Settings:1563252049544740995>",
+    "ladder": "<:16400redswordrankicon:1563259184038809713>",
+    "announcement": "<:announcement:1563259185490034802>",
+    "audit": "<a:a7_book:1563259186962243647>",
+    "success": "<a:MW_tick:1563259189135016098>",
+    "warning": "<a:03_awarndns:1563259190548504608>",
+    "error": "<a:error:1563259192134074370>",
+    "user": "<:cristiano:1540670348851150958>",
+    "bullet": "<:MW_arrow_right:1563259195397246976>",
+    "welcome": "<a:wel:1563259197603188776>",
+    "ticket": "<:ticket:1563259199474106393>",
+    "support": "<:Support:1563259201365745746>",
+    "purchase": "<a:decomp:1563252072978055259>",
+    "partner": "<:developer:1540055696601784320>"
 }
 
 EMOJI_FALLBACKS = {
