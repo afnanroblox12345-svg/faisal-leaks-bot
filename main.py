@@ -117,6 +117,17 @@ def is_bot_owner(ctx):
     return bool(OWNER_ID) and ctx.author.id == OWNER_ID
 
 
+def guild_emoji(guild, key):
+    """Return this server's uploaded copy of an emoji when available."""
+    if guild is not None:
+        uploaded_id = config.get("uploaded_emojis", {}).get(str(guild.id), {}).get(key)
+        if uploaded_id:
+            emoji = discord.utils.get(guild.emojis, id=int(uploaded_id))
+            if emoji:
+                return str(emoji)
+    return EMOJIS.get(key, "")
+
+
 def user_is_supervisor(ctx):
     if user_is_owner(ctx):
         return True
@@ -236,14 +247,19 @@ async def upload_emoji_pack(guild):
             animated, name, emoji_id = match.groups()
             sources.append((key, name[:32], int(emoji_id), animated == "a"))
 
-    existing_names = {emoji.name for emoji in guild.emojis}
+    existing_by_name = {emoji.name: emoji for emoji in guild.emojis}
     guild_uploads = config.setdefault("uploaded_emojis", {}).setdefault(str(guild.id), {})
     timeout = aiohttp.ClientTimeout(total=20)
     uploaded_count = 0
+    mapping_changed = False
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         for key, name, emoji_id, animated in sources:
-            if name in existing_names:
+            if name in existing_by_name:
+                existing_emoji_id = existing_by_name[name].id
+                if guild_uploads.get(key) != existing_emoji_id:
+                    guild_uploads[key] = existing_emoji_id
+                    mapping_changed = True
                 continue
             extension = "gif" if animated else "png"
             url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{extension}?size=128"
@@ -265,16 +281,17 @@ async def upload_emoji_pack(guild):
                     image=image_bytes,
                     reason="SLS Helper automatic emoji pack"
                 )
-                existing_names.add(name)
+                existing_by_name[name] = emoji
                 guild_uploads[key] = emoji.id
                 uploaded_count += 1
+                mapping_changed = True
             except discord.Forbidden:
                 logging.info("SLS Helper lacks permission to upload emoji %s to %s", name, guild.id)
                 break
             except (discord.HTTPException, aiohttp.ClientError, asyncio.TimeoutError):
                 logging.exception("SLS Helper could not upload emoji %s to %s", name, guild.id)
 
-    if uploaded_count:
+    if mapping_changed:
         save_config()
     logging.info("SLS Helper uploaded %s custom emojis to guild %s", uploaded_count, guild.id)
 
@@ -1962,6 +1979,7 @@ async def ownerhelp(ctx):
     embed.add_field(name="Process", value="`>shutdown` — stop the bot\n`>restart` — restart the bot", inline=False)
     embed.add_field(name="Access", value="`>disable <command>` — disable a command globally\n`>enable <command>` — re-enable it\n`>maintenance on/off` — block commands for everyone except you", inline=False)
     embed.add_field(name="Presence & Info", value="`>setstatus <text>` — set the bot activity\n`>clearstatus` — clear its activity\n`>servercount` — show the number of servers", inline=False)
+    embed.add_field(name="Server Setup", value="`>uploademojis` — upload the configured emoji pack to this server", inline=False)
     await ctx.reply(embed=embed)
 
 
@@ -2127,6 +2145,7 @@ async def staffsettings(ctx):
 
 @bot.command(name="help")
 async def help_command(ctx):
+    e = lambda key: guild_emoji(ctx.guild, key)
     embed = discord.Embed(title=f"{EMOJIS['gear']} SLS Helper • Command Center", description="Here are all available command modules:", color=THEME_BLUE)
     embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
     embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
@@ -2135,9 +2154,30 @@ async def help_command(ctx):
     embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`, `>slots <bet>`, `>betflip <heads/tails> <bet>`", inline=False)
     embed.add_field(name=f"{EMOJIS['purchase']} Economy", value="`>economy` for the full list: balance, daily, work, beg, crime, deposit, withdraw, pay, leaderboard, shop, buy, sell, inventory, bankupgrade, rob, slots, betflip", inline=False)
     embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>setlogchan #channel`, `>setecochan #channel`, `>staffsettings`", inline=False)
+    embed = discord.Embed(title=f"{e('gear')} SLS Helper • Command Center", description="Here are all available command modules:", color=THEME_BLUE)
+    embed.add_field(name=f"{e('shield')} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
+    embed.add_field(name=f"{e('warning')} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
+    embed.add_field(name=f"{e('ticket')} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory <support/purchase/partnership> #category`", inline=False)
+    embed.add_field(name=f"{e('user')} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
+    embed.add_field(name=f"{e('success')} Fun & Games", value="`>coinflip`, `>roll`, `>slots <bet>`, `>betflip <heads/tails> <bet>`", inline=False)
+    embed.add_field(name=f"{e('purchase')} Economy", value="`>economy` for the full list: balance, daily, work, beg, crime, deposit, withdraw, pay, leaderboard, shop, buy, sell, inventory, bankupgrade, rob, slots, betflip", inline=False)
+    embed.add_field(name=f"{e('gear')} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>setlogchan #channel`, `>setecochan #channel`, `>staffsettings`", inline=False)
     if is_bot_owner(ctx):
         embed.add_field(name=f"{EMOJIS['shield']} Bot Owner", value="`>ownerhelp`, `>shutdown`, `>restart`, `>disable <command>`, `>enable <command>`, `>maintenance on/off`, `>setstatus <text>`, `>clearstatus`, `>servercount`", inline=False)
+        embed.add_field(name=f"{e('shield')} Bot Owner", value="`>ownerhelp`, `>shutdown`, `>restart`, `>disable <command>`, `>enable <command>`, `>maintenance on/off`, `>setstatus <text>`, `>clearstatus`, `>servercount`, `>uploademojis`", inline=False)
     await ctx.reply(embed=embed, mention_author=False)
+
+
+@bot.command(name="uploademojis")
+async def upload_emojis_command(ctx):
+    if not is_bot_owner(ctx):
+        await ctx.reply("⛔ Bot owner only.", mention_author=False)
+        return
+    if ctx.guild is None:
+        await ctx.reply("Use this command inside a server.", mention_author=False)
+        return
+    await upload_emoji_pack(ctx.guild)
+    await ctx.reply("✅ Emoji upload finished. Run `>help` again to use the server copies.", mention_author=False)
 
 
 # =========================
