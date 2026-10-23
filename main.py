@@ -91,11 +91,8 @@ config = {
     "warnings": {},
     "trainings": {},
     "economy": {},
-    "log_channels": {},
+        "log_channels": {},
     "log_webhooks": {},
-    "economy_channels": {}
-    ,"disabled_commands": {}
-    ,"maintenance": {"enabled": False}
     "economy_channels": {},
     "disabled_commands": {},
     "maintenance": {"enabled": False},
