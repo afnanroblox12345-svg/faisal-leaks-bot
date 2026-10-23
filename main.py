@@ -69,7 +69,7 @@ config = {
     "log_webhooks": {},
     "economy_channels": {},
     "disabled_commands": {},
-    "maintenance": {"enabled": False}
+    "maintenance": {"enabled": False},
     "maintenance": {"enabled": False},
     "uploaded_emojis": {}
 }
