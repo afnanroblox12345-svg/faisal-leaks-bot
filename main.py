@@ -7,11 +7,14 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-# =========================
-# CONFIGURATION
-# =========================
+# =====================================================================
+# SLS HELPER — PRODUCTION CONFIGURATION & SETUP
+# =====================================================================
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname]s] %(name)s: %(message)s"
+)
 
 TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("BOT_OWNER_ID", "0"))
@@ -28,35 +31,17 @@ bot = commands.Bot(
     help_command=None
 )
 
-# =========================
-# CUSTOM BLUE EMOJI MAPPING
-# =========================
-
-EMOJIS = {
-    "promo": "<a:blue_star:3045>",
-    "demo": "<:blue_deer:6019>",
-    "shield": "<a:blue_fire:31347>",
-    "gear": "<:blue_deer:6019>",
-    "ladder": "<a:blue_star:3045>",
-    "announcement": "<a:blue_fire:31347>",
-    "audit": "<a:blue_star:3045>",
-    "success": "<a:blue_star:3045>",
-    "warning": "<a:blue_fire:31347>",
-    "error": "<a:blue_fire:31347>",
-    "user": "<:blue_deer:6019>",
-    "bullet": "<a:blue_star:3045>",
-    "welcome": "<a:blue_fire:31347>",
-    "ticket": "<a:blue_star:3045>",
-    "support": "<:blue_deer:6019>",
-    "purchase": "<a:blue_star:3045>",
-    "partner": "<a:blue_fire:31347>"
-}
-
-# Auto-upload URLs for your selected blue animated/aesthetic emojis
+# Comprehensive Blue & Aesthetic Emoji Sources for Auto-Upload Setup
 BLUE_EMOJI_SOURCES = {
     "blue_star": "https://cdn3.emoji.gg/emojis/3045-blue-star.gif",
     "blue_fire": "https://cdn3.emoji.gg/emojis/31347-bluefire.gif",
-    "blue_deer": "https://cdn3.emoji.gg/emojis/6019-blue-deer.png"
+    "blue_deer": "https://cdn3.emoji.gg/emojis/6019-blue-deer.png",
+    "blue_shield": "https://cdn.discordapp.com/emojis/1561078954519961622.png",
+    "blue_gem": "https://cdn.discordapp.com/emojis/1561077598791016591.png",
+    "blue_ticket": "https://cdn.discordapp.com/emojis/1560983848345665637.png",
+    "blue_support": "https://cdn.discordapp.com/emojis/1561328482724614238.png",
+    "blue_purchase": "https://cdn.discordapp.com/emojis/1561328437057032222.png",
+    "blue_partner": "https://cdn.discordapp.com/emojis/1561337139373932593.png"
 }
 
 config = {
@@ -83,7 +68,7 @@ def load_config():
     except FileNotFoundError:
         save_config()
     except (json.JSONDecodeError, OSError):
-        logging.exception("Could not load config file")
+        logging.exception("Could not load configuration file.")
 
 
 def save_config():
@@ -93,16 +78,52 @@ def save_config():
             json.dump(config, file, indent=4)
         os.replace(temporary_file, CONFIG_FILE)
     except OSError:
-        logging.exception("Could not save configuration")
+        logging.exception("Could not save configuration file safely.")
 
 
 def guild_setting(setting, guild_id):
     return config[setting].get(str(guild_id))
 
 
-# =========================
-# PERMISSION & LIMIT HELPERS
-# =========================
+# =====================================================================
+# DYNAMIC EMOJI RESOLUTION HELPER
+# =====================================================================
+
+def get_emoji(guild, name):
+    """Retrieves custom server emojis dynamically or falls back cleanly."""
+    if guild:
+        e = discord.utils.get(guild.emojis, name=name)
+        if e:
+            return str(e)
+    return "🔹"
+
+
+def get_emoji_dict(guild):
+    """Generates the full active blue-themed emoji mapping for a guild."""
+    return {
+        "promo": get_emoji(guild, "blue_gem"),
+        "demo": get_emoji(guild, "blue_deer"),
+        "shield": get_emoji(guild, "blue_shield"),
+        "gear": get_emoji(guild, "blue_deer"),
+        "ladder": get_emoji(guild, "blue_star"),
+        "announcement": get_emoji(guild, "blue_fire"),
+        "audit": get_emoji(guild, "blue_star"),
+        "success": get_emoji(guild, "blue_star"),
+        "warning": get_emoji(guild, "blue_fire"),
+        "error": get_emoji(guild, "blue_fire"),
+        "user": get_emoji(guild, "blue_deer"),
+        "bullet": get_emoji(guild, "blue_star"),
+        "welcome": get_emoji(guild, "blue_fire"),
+        "ticket": get_emoji(guild, "blue_ticket"),
+        "support": get_emoji(guild, "blue_support"),
+        "purchase": get_emoji(guild, "blue_purchase"),
+        "partner": get_emoji(guild, "blue_partner")
+    }
+
+
+# =====================================================================
+# PERMISSION & RATE LIMIT VALIDATORS
+# =====================================================================
 
 def user_is_owner(ctx):
     return ctx.author.id == OWNER_ID or ctx.author.id == ctx.guild.owner_id
@@ -151,9 +172,9 @@ def check_and_increment_action_limit(ctx, action_type, limit=3):
     return True, len(timestamps)
 
 
-# =========================
-# AUDIT LOGGING
-# =========================
+# =====================================================================
+# AUDIT LOGGING SERVICE
+# =====================================================================
 
 async def audit(guild, message):
     channel_id = guild_setting("audit_channels", guild.id)
@@ -165,21 +186,22 @@ async def audit(guild, message):
     try:
         await channel.send(message, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
-        logging.exception("Failed to send audit log")
+        logging.exception("Failed to dispatch audit log entry.")
 
 
-# =========================
-# TICKET SYSTEM INTERACTIVE VIEWS
-# =========================
+# =====================================================================
+# TICKET SYSTEM INTERACTIVE VIEWS & CONTROLLERS
+# =====================================================================
 
 class TicketPanelActionsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Claim Ticket", style=discord.ButtonStyle.primary, custom_id="claim_ticket_btn")
+    @discord.ui.button(label="Claim Ticket", style=discord.ButtonStyle.primary, emoji="👋", custom_id="claim_ticket_btn")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        emojis = get_emoji_dict(interaction.guild)
         if not user_is_staff_interaction(interaction):
-            await interaction.response.send_message(f"{EMOJIS['error']} Only staff members can claim tickets.", ephemeral=True)
+            await interaction.response.send_message(f"{emojis['error']} Only staff members can claim tickets.", ephemeral=True)
             return
 
         button.disabled = True
@@ -191,12 +213,13 @@ class TicketPanelActionsView(discord.ui.View):
         ping_target = staff_role.mention if staff_role else ""
 
         await interaction.response.edit_message(view=self)
-        await interaction.channel.send(f"{EMOJIS['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
+        await interaction.channel.send(f"{emojis['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
         await audit(interaction.guild, f"Ticket claimed: {interaction.channel.name} by {interaction.user}")
 
-    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.red, custom_id="close_ticket_btn")
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"{EMOJIS['warning']} Closing ticket in 5 seconds...", ephemeral=False)
+        emojis = get_emoji_dict(interaction.guild)
+        await interaction.response.send_message(f"{emojis['warning']} Closing ticket channel in 5 seconds...", ephemeral=False)
         await audit(interaction.guild, f"Ticket closed by {interaction.user} | Channel: {interaction.channel.name}")
         await asyncio.sleep(5)
         try:
@@ -217,11 +240,11 @@ def user_is_staff_interaction(interaction):
 
 
 class TicketSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, guild=None):
         options = [
-            discord.SelectOption(label="Support", description="General help and support inquiries", emoji=discord.PartialEmoji.from_str(EMOJIS['support'])),
-            discord.SelectOption(label="Purchase", description="Purchase service requests", emoji=discord.PartialEmoji.from_str(EMOJIS['purchase'])),
-            discord.SelectOption(label="Partnership", description="Server partnership requests", emoji=discord.PartialEmoji.from_str(EMOJIS['partner']))
+            discord.SelectOption(label="Support", description="General help and support inquiries"),
+            discord.SelectOption(label="Purchase", description="Purchase service requests"),
+            discord.SelectOption(label="Partnership", description="Server partnership requests")
         ]
         super().__init__(placeholder="Select a ticket category...", min_values=1, max_values=1, options=options, custom_id="ticket_category_select")
 
@@ -229,10 +252,11 @@ class TicketSelect(discord.ui.Select):
         guild = interaction.guild
         member = interaction.user
         category_name = self.values[0]
+        emojis = get_emoji_dict(guild)
 
         existing_channel = discord.utils.find(lambda c: f"-{member.name.lower()}-" in c.name, guild.text_channels)
         if existing_channel:
-            await interaction.response.send_message(f"{EMOJIS['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
+            await interaction.response.send_message(f"{emojis['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
             return
 
         overwrites = {
@@ -275,7 +299,7 @@ class TicketSelect(discord.ui.Select):
         )
 
         embed = discord.Embed(
-            title=f"{EMOJIS['ticket']} Support Ticket — {category_name}",
+            title=f"{emojis['ticket']} Support Ticket — {category_name}",
             description=f"Hello {member.mention}!\nYou selected **{category_name}**. Support staff will be with you shortly.\n\nClick **Claim Ticket** to take ownership or **Close Ticket** when finished.",
             color=discord.Color.blue(),
             timestamp=discord.utils.utcnow()
@@ -283,108 +307,19 @@ class TicketSelect(discord.ui.Select):
         embed.set_footer(text="SLS Helper • Ticket System")
 
         await channel.send(content=staff_role.mention if staff_role else "", embed=embed, view=TicketPanelActionsView())
-        await interaction.response.send_message(f"{EMOJIS['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"{emojis['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
         await audit(guild, f"Ticket created ({category_name}) by {member} ({member.id}) | Channel: {channel.name}")
 
 
 class TicketDropdownView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, guild=None):
         super().__init__(timeout=None)
-        self.add_item(TicketSelect())
+        self.add_item(TicketSelect(guild=guild))
 
 
-# =========================
-# AUTO EMOJI UPLOADER
-# =========================
-
-@bot.command(name="setupemojis")
-@commands.guild_only()
-async def setupemojis(ctx):
-    """Automatically downloads and uploads your custom blue emojis to the server."""
-    if not user_is_owner(ctx):
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only server owners can run setup commands.", color=discord.Color.blue()))
-        return
-
-    status_msg = await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['bullet']} Uploading your selected blue emojis...", color=discord.Color.blue()))
-    uploaded_count = 0
-
-    async with aiohttp.ClientSession() as session:
-        for emoji_name, url in BLUE_EMOJI_SOURCES.items():
-            if discord.utils.get(ctx.guild.emojis, name=emoji_name):
-                continue
-            try:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        img_bytes = await resp.read()
-                        await ctx.guild.create_custom_emoji(name=emoji_name, image=img_bytes)
-                        uploaded_count += 1
-            except Exception as e:
-                logging.error(f"Failed to upload {emoji_name}: {e}")
-
-    embed = discord.Embed(
-        title=f"{EMOJIS['success']} Blue Emojis Auto-Uploaded",
-        description=f"Successfully added **{uploaded_count}** custom emojis to **{ctx.guild.name}**!",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text="SLS Helper • Theme Loaded")
-    await status_msg.edit(embed=embed)
-
-
-# =========================
-# EMBED HELPERS
-# =========================
-
-async def send_promodemo_embed(guild, member, role, action, moderator):
-    channel_id = guild_setting("promodemo_channels", guild.id)
-    if not channel_id:
-        return
-    channel = guild.get_channel(int(channel_id))
-    if channel is None:
-        return
-
-    promoted = action == "promoted"
-    embed = discord.Embed(
-        title=f"{EMOJIS['promo']} Staff Promotion" if promoted else f"{EMOJIS['demo']} Staff Demotion",
-        description=f"{member.mention} has been **promoted**!" if promoted else f"{member.mention} has been **demoted**.",
-        color=discord.Color.blue(),
-        timestamp=discord.utils.utcnow()
-    )
-    embed.add_field(name=f"{EMOJIS['user']} Staff Member", value=f"{member.mention}\n`{member.id}`", inline=False)
-    embed.add_field(name=f"{EMOJIS['ladder']} Role", value=role.mention, inline=True)
-    embed.add_field(name=f"{EMOJIS['shield']} Action By", value=moderator.mention, inline=True)
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=f"{guild.name} • SLS Helper")
-
-    try:
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException:
-        pass
-
-
-async def change_staff_role(ctx, member, target_role, action):
-    if target_role is None:
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Role not found.", color=discord.Color.blue()))
-        return
-
-    try:
-        if action == "promote":
-            await member.add_roles(target_role, reason=f"Staff promotion by {ctx.author}")
-            result = "promoted"
-        else:
-            await member.remove_roles(target_role, reason=f"Staff demotion by {ctx.author}")
-            result = "demoted"
-
-        await send_promodemo_embed(ctx.guild, member, target_role, result, ctx.author)
-        await audit(ctx.guild, f"Staff {result}: {member} | Role: {target_role.name} | By: {ctx.author}")
-        emoji = EMOJIS['promo'] if result == "promoted" else EMOJIS['demo']
-        await ctx.reply(embed=discord.Embed(description=f"{emoji} {member.mention} was **{result}**: {target_role.mention}", color=discord.Color.blue()))
-    except discord.Forbidden:
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions.", color=discord.Color.blue()))
-
-
-# =========================
-# STAFF TRAINING COMMANDS
-# =========================
+# =====================================================================
+# STAFF TRAINING SESSION SYSTEM
+# =====================================================================
 
 class TrainingControlView(discord.ui.View):
     def __init__(self, trainee_id, trainer_id):
@@ -392,10 +327,11 @@ class TrainingControlView(discord.ui.View):
         self.trainee_id = trainee_id
         self.trainer_id = trainer_id
 
-    @discord.ui.button(label="Pass Training", style=discord.ButtonStyle.primary, custom_id="pass_training_btn")
+    @discord.ui.button(label="Pass Training", style=discord.ButtonStyle.success, custom_id="pass_training_btn")
     async def pass_training(self, interaction: discord.Interaction, button: discord.ui.Button):
+        emojis = get_emoji_dict(interaction.guild)
         if interaction.user.id != self.trainer_id and not user_is_owner(interaction):
-            await interaction.response.send_message(f"{EMOJIS['error']} Permission denied.", ephemeral=True)
+            await interaction.response.send_message(f"{emojis['error']} Only the designated trainer can complete this evaluation.", ephemeral=True)
             return
 
         guild_id = str(interaction.guild.id)
@@ -417,8 +353,8 @@ class TrainingControlView(discord.ui.View):
         trainee_mention = trainee.mention if trainee else f"<@{self.trainee_id}>"
 
         embed = discord.Embed(
-            title=f"{EMOJIS['success']} Training Passed!",
-            description=f"{trainee_mention} has passed staff training!",
+            title=f"{emojis['success']} Staff Training Passed",
+            description=f"{trainee_mention} has successfully passed staff training!",
             color=discord.Color.blue(),
             timestamp=discord.utils.utcnow()
         )
@@ -426,74 +362,96 @@ class TrainingControlView(discord.ui.View):
             item.disabled = True
 
         await interaction.response.edit_message(embed=embed, view=self)
+        await audit(interaction.guild, f"Staff Training Passed: {trainee_mention} | Trainer: {interaction.user}")
 
 
-@bot.command(name="train")
+# =====================================================================
+# BOT COMMANDS & MODULES
+# =====================================================================
+
+@bot.command(name="setupemojis")
 @commands.guild_only()
-async def train(ctx, trainee: discord.Member):
-    """Starts staff training."""
-    if not user_is_supervisor(ctx):
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Permission denied.", color=discord.Color.blue()))
+async def setupemojis(ctx):
+    """Automatically downloads and uploads all blue-themed emojis to the server."""
+    emojis = get_emoji_dict(ctx.guild)
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Only server owners can run setup commands.", color=discord.Color.blue()))
         return
 
-    embed = discord.Embed(
-        title=f"{EMOJIS['shield']} Staff Training Session",
-        description=f"Welcome {trainee.mention} to your training session!",
-        color=discord.Color.blue(),
-        timestamp=discord.utils.utcnow()
-    )
-    embed.add_field(name=f"{EMOJIS['user']} Trainee", value=trainee.mention, inline=True)
-    embed.add_field(name=f"{EMOJIS['shield']} Trainer", value=ctx.author.mention, inline=True)
-    embed.set_footer(text="SLS Helper Training")
+    status_msg = await ctx.reply(embed=discord.Embed(description=f"{emojis['bullet']} Downloading and uploading blue custom emojis...", color=discord.Color.blue()))
+    uploaded_count = 0
 
-    view = TrainingControlView(trainee_id=trainee.id, trainer_id=ctx.author.id)
-    await ctx.send(embed=embed, view=view)
+    async with aiohttp.ClientSession() as session:
+        for emoji_name, url in BLUE_EMOJI_SOURCES.items():
+            if discord.utils.get(ctx.guild.emojis, name=emoji_name):
+                continue
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        img_bytes = await resp.read()
+                        await ctx.guild.create_custom_emoji(name=emoji_name, image=img_bytes)
+                        uploaded_count += 1
+            except Exception as e:
+                logging.error(f"Failed to upload emoji {emoji_name}: {e}")
+
+    updated_emojis = get_emoji_dict(ctx.guild)
+    embed = discord.Embed(
+        title=f"{updated_emojis['success']} Emojis Auto-Uploaded",
+        description=f"Successfully added **{uploaded_count}** custom emojis to **{ctx.guild.name}**!",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="SLS Helper • Theme Loaded")
+    await status_msg.edit(embed=embed)
 
 
 @bot.command(name="sendticket")
 @commands.guild_only()
 async def sendticket(ctx, channel: discord.TextChannel = None):
-    """Deploys ticket panel."""
+    """Deploys the persistent ticket selection panel."""
+    emojis = get_emoji_dict(ctx.guild)
     if not user_is_supervisor(ctx):
-        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Permission denied.", color=discord.Color.blue()))
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Permission denied.", color=discord.Color.blue()))
         return
 
     target_channel = channel or ctx.channel
     embed = discord.Embed(
-        title=f"{EMOJIS['ticket']} SLS Helper • Support Center",
+        title=f"{emojis['ticket']} SLS Helper • Support Center",
         description=(
-            f"Welcome to **{ctx.guild.name}**! {EMOJIS['shield']}\n\n"
-            f"Select a category below:\n\n"
-            f"{EMOJIS['bullet']} {EMOJIS['support']} **Support** — General help\n"
-            f"{EMOJIS['bullet']} {EMOJIS['purchase']} **Purchase** — Purchases\n"
-            f"{EMOJIS['bullet']} {EMOJIS['partner']} **Partnership** — Partnerships"
+            f"Welcome to **{ctx.guild.name}** Support Center! {emojis['shield']}\n\n"
+            f"Select a category below to open a ticket:\n\n"
+            f"{emojis['bullet']} {emojis['support']} **Support** — General help & assistance\n"
+            f"{emojis['bullet']} {emojis['purchase']} **Purchase** — Service & purchase inquiries\n"
+            f"{emojis['bullet']} {emojis['partner']} **Partnership** — Server partnership requests"
         ),
         color=discord.Color.blue()
     )
     embed.set_footer(text="SLS Helper Ticket System")
-    await target_channel.send(embed=embed, view=TicketDropdownView())
-    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Panel deployed!", color=discord.Color.blue()))
+    await target_channel.send(embed=embed, view=TicketDropdownView(guild=ctx.guild))
+    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Ticket panel successfully deployed to {target_channel.mention}!", color=discord.Color.blue()))
 
 
 @bot.command(name="setstaffrole")
 @commands.guild_only()
 async def setstaffrole(ctx, role: discord.Role):
+    emojis = get_emoji_dict(ctx.guild)
     if not user_is_owner(ctx):
         return
     if "staff_roles" not in config:
         config["staff_roles"] = {}
     config["staff_roles"][str(ctx.guild.id)] = role.id
     save_config()
-    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Staff role set to {role.mention}.", color=discord.Color.blue()))
+    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Ticket staff role set to {role.mention}.", color=discord.Color.blue()))
 
 
 @bot.command(name="setcategory")
 @commands.guild_only()
 async def setcategory(ctx, ticket_type: str, category: discord.CategoryChannel):
+    emojis = get_emoji_dict(ctx.guild)
     if not user_is_owner(ctx):
         return
     ticket_type = ticket_type.lower()
     if ticket_type not in ["support", "purchase", "partnership"]:
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Invalid type! Choose from: `support`, `purchase`, `partnership`.", color=discord.Color.blue()))
         return
     guild_id = str(ctx.guild.id)
     if "ticket_categories" not in config:
@@ -502,14 +460,66 @@ async def setcategory(ctx, ticket_type: str, category: discord.CategoryChannel):
         config["ticket_categories"][guild_id] = {}
     config["ticket_categories"][guild_id][ticket_type] = category.id
     save_config()
-    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Category for **{ticket_type}** set to **{category.name}**.", color=discord.Color.blue()))
+    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Category for **{ticket_type}** set to **{category.name}**.", color=discord.Color.blue()))
+
+
+@bot.command(name="kick")
+@commands.guild_only()
+async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
+    emojis = get_emoji_dict(ctx.guild)
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Permission denied.", color=discord.Color.blue()))
+        return
+    allowed, count = check_and_increment_action_limit(ctx, "kicks", limit=3)
+    if not allowed:
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['warning']} Daily limit of 3 kicks reached.", color=discord.Color.blue()))
+        return
+    try:
+        await member.kick(reason=reason)
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Kicked {member.mention} | Reason: {reason}", color=discord.Color.blue()))
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Missing permissions to kick user.", color=discord.Color.blue()))
+
+
+@bot.command(name="ban")
+@commands.guild_only()
+async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
+    emojis = get_emoji_dict(ctx.guild)
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Permission denied.", color=discord.Color.blue()))
+        return
+    allowed, count = check_and_increment_action_limit(ctx, "bans", limit=3)
+    if not allowed:
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['warning']} Daily limit of 3 bans reached.", color=discord.Color.blue()))
+        return
+    try:
+        await member.ban(reason=reason)
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Banned {member.mention} | Reason: {reason}", color=discord.Color.blue()))
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Missing permissions to ban user.", color=discord.Color.blue()))
+
+
+@bot.command(name="ping")
+@commands.guild_only()
+async def ping(ctx):
+    emojis = get_emoji_dict(ctx.guild)
+    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} SLS Helper Latency: `{round(bot.latency * 1000)}ms`", color=discord.Color.blue()))
 
 
 @bot.command(name="help")
 async def help_command(ctx):
-    embed = discord.Embed(title=f"{EMOJIS['gear']} SLS Helper • Command Center", description="Blue themed utility & moderation commands:", color=discord.Color.blue())
-    embed.add_field(name=f"{EMOJIS['shield']} Commands", value="`>sendticket`, `>setupemojis`, `>train`, `>promo`, `>demo`, `>kick`, `>ban`, `>ping`", inline=False)
-    embed.set_footer(text="SLS Helper")
+    emojis = get_emoji_dict(ctx.guild)
+    embed = discord.Embed(
+        title=f"{emojis['gear']} SLS Helper • Command Center",
+        description="Comprehensive blue-themed moderation & utility command center:",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name=f"{emojis['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>staff`, `>train`, `>trainings`", inline=False)
+    embed.add_field(name=f"{emojis['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
+    embed.add_field(name=f"{emojis['ticket']} Support & Tickets", value="`>sendticket`, `>setstaffrole @role`, `>setcategory <type> #category`", inline=False)
+    embed.add_field(name=f"{emojis['gear']} Setup & Emojis", value="`>setupemojis`, `>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`", inline=False)
+    embed.add_field(name=f"{emojis['user']} Utility", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
+    embed.set_footer(text="SLS Helper System")
     await ctx.reply(embed=embed, mention_author=False)
 
 
@@ -517,7 +527,7 @@ async def help_command(ctx):
 async def on_ready():
     bot.add_view(TicketDropdownView())
     bot.add_view(TicketPanelActionsView())
-    logging.info("SLS Helper logged in as %s", bot.user)
+    logging.info("SLS Helper successfully logged in as %s", bot.user)
 
 
 load_config()
