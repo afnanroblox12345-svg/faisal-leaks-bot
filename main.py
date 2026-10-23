@@ -51,7 +51,7 @@ class EmojiContext(commands.Context):
 bot = commands.Bot(
     command_prefix=">",
     intents=intents,
-    activity=discord.Game(name="Super League Stars • Made by Afnan the GOAT"),
+    activity=discord.Game(name="Super League Stars"),
     context_class=EmojiContext,
     help_command=None
 )
