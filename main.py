@@ -1,21 +1,19 @@
 import os
-import sys
 import json
 import logging
 import random
+import sys
 import asyncio
 import aiohttp
 import discord
 from discord.ext import commands
 
-# =====================================================================
-# SLS HELPER — PRODUCTION CONFIGURATION
-# =====================================================================
+# =========================
+# CONFIGURATION
+# =========================
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname]s] %(name)s: %(message)s"
-)
+logging.basicConfig(level=logging.INFO)
+THEME_BLUE = discord.Color.from_rgb(38, 120, 255)
 
 TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("BOT_OWNER_ID", "0"))
@@ -32,40 +30,28 @@ bot = commands.Bot(
     help_command=None
 )
 
-# =====================================================================
-# EXTENSIVE BLUE & ANIMATED EMOJI COLLECTION (EMOJI.GG SOURCES)
-# =====================================================================
+# =========================
+# CUSTOM EMOJI CONFIGURATION
+# =========================
 
-BLUE_EMOJI_SOURCES = {
-    # Core Branding
-    "blue_star": "https://cdn3.emoji.gg/emojis/3045-blue-star.gif",
-    "blue_fire": "https://cdn3.emoji.gg/emojis/31347-bluefire.gif",
-    "blue_deer": "https://cdn3.emoji.gg/emojis/6019-blue-deer.png",
-    "blue_shield": "https://cdn.discordapp.com/emojis/1561078954519961622.png",
-    "blue_gem": "https://cdn.discordapp.com/emojis/1561077598791016591.png",
-    # Ticket Categories
-    "blue_ticket": "https://cdn.discordapp.com/emojis/1560983848345665637.png",
-    "blue_support": "https://cdn.discordapp.com/emojis/1561328482724614238.png",
-    "blue_purchase": "https://cdn.discordapp.com/emojis/1561328437057032222.png",
-    "blue_partner": "https://cdn.discordapp.com/emojis/1561337139373932593.png",
-    # Aesthetic & UI
-    "blue_heart": "https://cdn3.emoji.gg/emojis/3820-blue-heart.gif",
-    "blue_sparkle": "https://cdn3.emoji.gg/emojis/7452-blue-sparkle.gif",
-    "blue_flame": "https://cdn3.emoji.gg/emojis/4946-twitch-logo-animated-blue.gif",
-    "blue_sword": "https://cdn.discordapp.com/emojis/1561077871206989845.png",
-    "blue_gear": "https://cdn.discordapp.com/emojis/1561077371895943319.png",
-    "blue_book": "https://cdn.discordapp.com/emojis/1561077741716111362.png",
-    "blue_tick": "https://cdn.discordapp.com/emojis/1561077516905484448.png",
-    "blue_warning": "https://cdn.discordapp.com/emojis/1561077438816194632.png",
-    "blue_error": "https://cdn.discordapp.com/emojis/1561078063968686081.png",
-    "blue_user": "https://cdn.discordapp.com/emojis/1561077921395904653.png",
-    "blue_arrow": "https://cdn.discordapp.com/emojis/1561077250638610563.png",
-    "blue_welcome": "https://cdn.discordapp.com/emojis/1561077660648738876.png",
-    # Economy & Games
-    "blue_coin": "https://cdn3.emoji.gg/emojis/3045-blue-star.gif",
-    "blue_bank": "https://cdn.discordapp.com/emojis/1561077741716111362.png",
-    "blue_dice": "https://cdn3.emoji.gg/emojis/7452-blue-sparkle.gif",
-    "blue_trophy": "https://cdn3.emoji.gg/emojis/31347-bluefire.gif"
+EMOJIS = {
+    "promo": "<a:giveaway:1561077598791016591>",
+    "demo": "<:angry:1561078014895329331>",
+    "shield": "<:z_mod_DiscordShield:1561078954519961622>",
+    "gear": "<:Settings:1561077371895943319>",
+    "ladder": "<:16400redswordrankicon:1561077871206989845>",
+    "announcement": "<:announcement:1561079523641004162>",
+    "audit": "<a:a7_book:1561077741716111362>",
+    "success": "<a:MW_tick:1561077516905484448>",
+    "warning": "<a:03_awarndns:1561077438816194632>",
+    "error": "<a:error:1561078063968686081>",
+    "user": "<:ntl_user:1561077921395904653>",
+    "bullet": "<:MW_arrow_right:1561077250638610563>",
+    "welcome": "<a:wel:1561077660648738876>",
+    "ticket": "<:ticket:1560983848345665637>",
+    "support": "<:Support:1561328482724614238>",
+    "purchase": "<a:decomp:1561328437057032222>",
+    "partner": "<:Partner:1561337139373932593>"
 }
 
 config = {
@@ -79,11 +65,16 @@ config = {
     "warnings": {},
     "trainings": {},
     "economy": {},
-    "inventories": {},
-    "daily_cooldowns": {},
-    "work_cooldowns": {},
-    "beg_cooldowns": {}
+    "log_channels": {},
+    "log_webhooks": {},
+    "economy_channels": {},
+    "disabled_commands": {},
+    "maintenance": {"enabled": False}
+    "maintenance": {"enabled": False},
+    "uploaded_emojis": {}
 }
+
+LOG_WEBHOOKS = {}
 
 
 def load_config():
@@ -97,7 +88,7 @@ def load_config():
     except FileNotFoundError:
         save_config()
     except (json.JSONDecodeError, OSError):
-        logging.exception("Could not load configuration file.")
+        logging.exception("Could not load config file")
 
 
 def save_config():
@@ -107,57 +98,23 @@ def save_config():
             json.dump(config, file, indent=4)
         os.replace(temporary_file, CONFIG_FILE)
     except OSError:
-        logging.exception("Could not save configuration file safely.")
+        logging.exception("Could not save configuration")
 
 
 def guild_setting(setting, guild_id):
     return config[setting].get(str(guild_id))
 
 
-# =====================================================================
-# DYNAMIC EMOJI RESOLUTION HELPER
-# =====================================================================
-
-def get_emoji(guild, name):
-    if guild:
-        e = discord.utils.get(guild.emojis, name=name)
-        if e:
-            return str(e)
-    return "🔹"
-
-
-def get_emoji_dict(guild):
-    return {
-        "promo": get_emoji(guild, "blue_gem"),
-        "demo": get_emoji(guild, "blue_deer"),
-        "shield": get_emoji(guild, "blue_shield"),
-        "gear": get_emoji(guild, "blue_gear"),
-        "ladder": get_emoji(guild, "blue_star"),
-        "announcement": get_emoji(guild, "blue_fire"),
-        "audit": get_emoji(guild, "blue_book"),
-        "success": get_emoji(guild, "blue_tick"),
-        "warning": get_emoji(guild, "blue_warning"),
-        "error": get_emoji(guild, "blue_error"),
-        "user": get_emoji(guild, "blue_user"),
-        "bullet": get_emoji(guild, "blue_arrow"),
-        "welcome": get_emoji(guild, "blue_welcome"),
-        "ticket": get_emoji(guild, "blue_ticket"),
-        "support": get_emoji(guild, "blue_support"),
-        "purchase": get_emoji(guild, "blue_purchase"),
-        "partner": get_emoji(guild, "blue_partner"),
-        "coin": get_emoji(guild, "blue_coin"),
-        "bank": get_emoji(guild, "blue_bank"),
-        "dice": get_emoji(guild, "blue_dice"),
-        "trophy": get_emoji(guild, "blue_trophy")
-    }
-
-
-# =====================================================================
-# PERMISSION & HELPER CHECKS
-# =====================================================================
+# =========================
+# PERMISSION & LIMIT HELPERS
+# =========================
 
 def user_is_owner(ctx):
     return ctx.author.id == OWNER_ID or ctx.author.id == ctx.guild.owner_id
+
+
+def is_bot_owner(ctx):
+    return bool(OWNER_ID) and ctx.author.id == OWNER_ID
 
 
 def user_is_supervisor(ctx):
@@ -203,18 +160,9 @@ def check_and_increment_action_limit(ctx, action_type, limit=3):
     return True, len(timestamps)
 
 
-def get_user_econ(user_id):
-    uid = str(user_id)
-    if "economy" not in config:
-        config["economy"] = {}
-    if uid not in config["economy"]:
-        config["economy"][uid] = {"wallet": 100, "bank": 0}
-    return config["economy"][uid]
-
-
-# =====================================================================
-# AUDIT LOGGING SERVICE
-# =====================================================================
+# =========================
+# AUDIT LOGGING
+# =========================
 
 async def audit(guild, message):
     channel_id = guild_setting("audit_channels", guild.id)
@@ -226,22 +174,151 @@ async def audit(guild, message):
     try:
         await channel.send(message, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
-        logging.exception("Failed to dispatch audit log entry.")
+        logging.exception("Failed to send audit log")
 
 
-# =====================================================================
+async def log_server_event(guild, title, description, color=THEME_BLUE):
+    """Send a server event as an embed to its configured logging channel."""
+    if guild is None:
+        return
+    channel_id = guild_setting("log_channels", guild.id)
+    if not channel_id:
+        return
+    channel = guild.get_channel(int(channel_id))
+    if channel is None:
+        return
+    embed = discord.Embed(
+        title=f"{EMOJIS['audit']} {title}",
+        description=(description or "No additional details.")[:4000],
+        color=color,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"{guild.name} • Server Event Log")
+    try:
+        webhook_id = config.setdefault("log_webhooks", {}).get(str(guild.id))
+        webhook = LOG_WEBHOOKS.get(guild.id)
+        if webhook is None:
+            webhooks = await channel.webhooks()
+            webhook = discord.utils.get(webhooks, id=int(webhook_id)) if webhook_id else None
+            if webhook is None:
+                webhook = discord.utils.find(lambda item: item.name == "SLS Helper Event Logs", webhooks)
+            if webhook is None:
+                webhook = await channel.create_webhook(name="SLS Helper Event Logs", reason="Server event embed logging")
+            config["log_webhooks"][str(guild.id)] = webhook.id
+            save_config()
+            LOG_WEBHOOKS[guild.id] = webhook
+        await webhook.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        logging.exception("Failed to send server event log through webhook")
+
+
+async def upload_emoji_pack(guild):
+    """Copy the configured custom emoji pack into a newly joined server."""
+    member = guild.me
+    if member is None:
+        logging.warning("SLS Helper could not upload emojis to %s: bot member is unavailable", guild.id)
+        return
+
+    permissions = member.guild_permissions
+    can_manage_expressions = (
+        getattr(permissions, "manage_expressions", False)
+        or getattr(permissions, "manage_emojis_and_stickers", False)
+    )
+    if not can_manage_expressions:
+        logging.info("SLS Helper joined %s without Manage Expressions; skipped emoji upload", guild.id)
+        return
+
+    import re
+    sources = []
+    for key, markup in EMOJIS.items():
+        match = re.fullmatch(r"<(a?):([A-Za-z0-9_]+):(\d+)>", markup)
+        if match:
+            animated, name, emoji_id = match.groups()
+            sources.append((key, name[:32], int(emoji_id), animated == "a"))
+
+    existing_names = {emoji.name for emoji in guild.emojis}
+    guild_uploads = config.setdefault("uploaded_emojis", {}).setdefault(str(guild.id), {})
+    timeout = aiohttp.ClientTimeout(total=20)
+    uploaded_count = 0
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for key, name, emoji_id, animated in sources:
+            if name in existing_names:
+                continue
+            extension = "gif" if animated else "png"
+            url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{extension}?size=128"
+            try:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        logging.info("Skipping emoji %s: source returned HTTP %s", name, response.status)
+                        continue
+                    if response.content_length and response.content_length >= 256 * 1024:
+                        logging.info("Skipping emoji %s: source is over the upload size limit", name)
+                        continue
+                    image_bytes = await response.read()
+                if len(image_bytes) >= 256 * 1024:
+                    logging.info("Skipping emoji %s: source is over the upload size limit", name)
+                    continue
+
+                emoji = await guild.create_custom_emoji(
+                    name=name,
+                    image=image_bytes,
+                    reason="SLS Helper automatic emoji pack"
+                )
+                existing_names.add(name)
+                guild_uploads[key] = emoji.id
+                uploaded_count += 1
+            except discord.Forbidden:
+                logging.info("SLS Helper lacks permission to upload emoji %s to %s", name, guild.id)
+                break
+            except (discord.HTTPException, aiohttp.ClientError, asyncio.TimeoutError):
+                logging.exception("SLS Helper could not upload emoji %s to %s", name, guild.id)
+
+    if uploaded_count:
+        save_config()
+    logging.info("SLS Helper uploaded %s custom emojis to guild %s", uploaded_count, guild.id)
+
+
+def economy_channel_allowed(ctx):
+    """Restrict all economy commands to the server's configured economy channel."""
+    economy_commands = {
+        "economy", "balance", "daily", "work", "beg", "crime", "deposit", "withdraw",
+        "pay", "leaderboard", "shop", "buy", "inventory", "sell", "bankupgrade", "rob",
+        "slots", "betflip", "addmoney", "removemoney", "setmoney", "addbank", "setbank",
+        "resetmoney", "reseteco"
+    }
+    if ctx.guild is None or ctx.command is None or ctx.command.name not in economy_commands:
+        return True
+    channel_id = guild_setting("economy_channels", ctx.guild.id)
+    return not channel_id or ctx.channel.id == int(channel_id)
+
+
+@bot.check
+async def enforce_economy_channel(ctx):
+    is_owner = is_bot_owner(ctx)
+    if not is_owner and config.get("maintenance", {}).get("enabled", False):
+        raise commands.CheckFailure("SLS Helper is currently in maintenance mode.")
+    if not is_owner and ctx.command is not None:
+        command_name = ctx.command.qualified_name.lower()
+        if config.get("disabled_commands", {}).get(command_name):
+            raise commands.CheckFailure(f"The `{command_name}` command is disabled.")
+    if not economy_channel_allowed(ctx):
+        raise commands.CheckFailure("Economy commands can only be used in the configured economy channel.")
+    return True
+
+
+# =========================
 # TICKET SYSTEM INTERACTIVE VIEWS
-# =====================================================================
+# =========================
 
 class TicketPanelActionsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Claim Ticket", style=discord.ButtonStyle.primary, emoji="👋", custom_id="claim_ticket_btn")
+    @discord.ui.button(label="Claim Ticket", style=discord.ButtonStyle.green, emoji="👋", custom_id="claim_ticket_btn")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        emojis = get_emoji_dict(interaction.guild)
         if not user_is_staff_interaction(interaction):
-            await interaction.response.send_message(f"{emojis['error']} Only staff members can claim tickets.", ephemeral=True)
+            await interaction.response.send_message(f"{EMOJIS['error']} Only staff members can claim tickets.", ephemeral=True)
             return
 
         button.disabled = True
@@ -253,13 +330,12 @@ class TicketPanelActionsView(discord.ui.View):
         ping_target = staff_role.mention if staff_role else ""
 
         await interaction.response.edit_message(view=self)
-        await interaction.channel.send(f"{emojis['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
+        await interaction.channel.send(f"{EMOJIS['success']} {ping_target} Ticket has been claimed by {interaction.user.mention}!")
         await audit(interaction.guild, f"Ticket claimed: {interaction.channel.name} by {interaction.user}")
 
-    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket_btn")
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.red, emoji="🔒", custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        emojis = get_emoji_dict(interaction.guild)
-        await interaction.response.send_message(f"{emojis['warning']} Closing ticket channel in 5 seconds...", ephemeral=False)
+        await interaction.response.send_message(f"{EMOJIS['warning']} Closing ticket in 5 seconds...", ephemeral=False)
         await audit(interaction.guild, f"Ticket closed by {interaction.user} | Channel: {interaction.channel.name}")
         await asyncio.sleep(5)
         try:
@@ -280,11 +356,11 @@ def user_is_staff_interaction(interaction):
 
 
 class TicketSelect(discord.ui.Select):
-    def __init__(self, guild=None):
+    def __init__(self):
         options = [
-            discord.SelectOption(label="Support", description="General help and support inquiries"),
-            discord.SelectOption(label="Purchase", description="Purchase service requests"),
-            discord.SelectOption(label="Partnership", description="Server partnership requests")
+            discord.SelectOption(label="Support", description="General help and support inquiries", emoji=discord.PartialEmoji.from_str(EMOJIS['support'])),
+            discord.SelectOption(label="Purchase", description="Purchase service requests", emoji=discord.PartialEmoji.from_str(EMOJIS['purchase'])),
+            discord.SelectOption(label="Partnership", description="Server partnership requests", emoji=discord.PartialEmoji.from_str(EMOJIS['partner']))
         ]
         super().__init__(placeholder="Select a ticket category...", min_values=1, max_values=1, options=options, custom_id="ticket_category_select")
 
@@ -292,11 +368,14 @@ class TicketSelect(discord.ui.Select):
         guild = interaction.guild
         member = interaction.user
         category_name = self.values[0]
-        emojis = get_emoji_dict(guild)
 
-        existing_channel = discord.utils.find(lambda c: f"-{member.name.lower()}-" in c.name, guild.text_channels)
+        # Check if user already has a ticket open containing their username
+        existing_channel = discord.utils.get(guild.text_channels, name=f"-{member.name.lower()}-")
+        if not existing_channel:
+            existing_channel = discord.utils.find(lambda c: f"-{member.name.lower()}-" in c.name, guild.text_channels)
+            
         if existing_channel:
-            await interaction.response.send_message(f"{emojis['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
+            await interaction.response.send_message(f"{EMOJIS['error']} You already have an open ticket: {existing_channel.mention}", ephemeral=True)
             return
 
         overwrites = {
@@ -316,6 +395,7 @@ class TicketSelect(discord.ui.Select):
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
+        # Fetch category mapping
         cat_data = config.get("ticket_categories", {}).get(str(guild.id), {})
         cat_id = cat_data.get(category_name.lower()) if isinstance(cat_data, dict) else None
         
@@ -325,9 +405,11 @@ class TicketSelect(discord.ui.Select):
         if not category:
             category = await guild.create_category("Support Tickets")
 
+        # Calculate next ticket number based on existing channels in the guild
         existing_tickets = [c for c in guild.text_channels if "-" in c.name and c.name.split("-")[0].isdigit()]
         ticket_number = len(existing_tickets) + 1
 
+        # Format: (ticket number)-(username)-(ticket category name) -> e.g. 1-silent-support
         clean_username = "".join(c for c in member.name.lower() if c.isalnum() or c in "-_")
         channel_name = f"{ticket_number}-{clean_username}-{category_name.lower()}"
 
@@ -339,425 +421,1979 @@ class TicketSelect(discord.ui.Select):
         )
 
         embed = discord.Embed(
-            title=f"{emojis['ticket']} Support Ticket — {category_name}",
+            title=f"{EMOJIS['ticket']} Support Ticket — {category_name}",
             description=f"Hello {member.mention}!\nYou selected **{category_name}**. Support staff will be with you shortly.\n\nClick **Claim Ticket** to take ownership or **Close Ticket** when finished.",
-            color=discord.Color.blue(),
+            color=THEME_BLUE,
             timestamp=discord.utils.utcnow()
         )
         embed.set_footer(text="SLS Helper • Ticket System")
 
         await channel.send(content=staff_role.mention if staff_role else "", embed=embed, view=TicketPanelActionsView())
-        await interaction.response.send_message(f"{emojis['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"{EMOJIS['success']} Your ticket has been created: {channel.mention}", ephemeral=True)
         await audit(guild, f"Ticket created ({category_name}) by {member} ({member.id}) | Channel: {channel.name}")
 
 
 class TicketDropdownView(discord.ui.View):
-    def __init__(self, guild=None):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(TicketSelect(guild=guild))
+        self.add_item(TicketSelect())
 
 
-# =====================================================================
-# BOT OWNER ADMIN COMMANDS
-# =====================================================================
+# =========================
+# EMBED HELPERS
+# =========================
 
-@bot.command(name="eval")
-async def eval_cmd(ctx, *, code: str):
-    """Executes arbitrary python code (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+async def send_promodemo_embed(guild, member, role, action, moderator):
+    channel_id = guild_setting("promodemo_channels", guild.id)
+    if not channel_id:
+        return
+    channel = guild.get_channel(int(channel_id))
+    if channel is None:
+        return
+
+    promoted = action == "promoted"
+    embed = discord.Embed(
+        title=f"{EMOJIS['promo']} Staff Promotion" if promoted else f"{EMOJIS['demo']} Staff Demotion",
+        description=f"{member.mention} has been **promoted**!" if promoted else f"{member.mention} has been **demoted**.",
+        color=discord.Color.green() if promoted else discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(name=f"{EMOJIS['user']} Staff Member", value=f"{member.mention}\n`{member.id}`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ladder']} Role", value=role.mention, inline=True)
+    embed.add_field(name=f"{EMOJIS['shield']} Action By", value=moderator.mention, inline=True)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(text=f"{guild.name} • SLS Helper System")
+
+    try:
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        pass
+
+
+async def change_staff_role(ctx, member, target_role, action):
+    if target_role is None:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} The specified or configured role could not be found in this server.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id or member.id == ctx.guild.owner_id or target_role.is_default() or target_role.managed:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} Action unauthorized or invalid role.", color=discord.Color.orange()))
+        return
+
+    try:
+        if action == "promote":
+            await member.add_roles(target_role, reason=f"Staff promotion by {ctx.author}")
+            result = "promoted"
+        else:
+            await member.remove_roles(target_role, reason=f"Staff demotion by {ctx.author}")
+            result = "demoted"
+
+        await send_promodemo_embed(ctx.guild, member, target_role, result, ctx.author)
+        await audit(ctx.guild, f"Staff {result}: {member} | Role: {target_role.name} | By: {ctx.author}")
+        emoji = EMOJIS['promo'] if result == "promoted" else EMOJIS['demo']
+        await ctx.reply(embed=discord.Embed(description=f"{emoji} {member.mention} was **{result}**: {target_role.mention}", color=discord.Color.green() if result == "promoted" else discord.Color.red()))
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to modify roles.", color=discord.Color.red()))
+
+
+# =========================
+# STAFF TRAINING COMMANDS
+# =========================
+
+class TrainingControlView(discord.ui.View):
+    def __init__(self, trainee_id, trainer_id):
+        super().__init__(timeout=None)
+        self.trainee_id = trainee_id
+        self.trainer_id = trainer_id
+
+    @discord.ui.button(label="Pass Training", style=discord.ButtonStyle.green, custom_id="pass_training_btn")
+    async def pass_training(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trainer_id and interaction.user.id != interaction.guild.owner_id and interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(f"{EMOJIS['error']} Only the designated trainer can complete this evaluation.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        user_id = str(self.trainee_id)
+
+        if "trainings" not in config:
+            config["trainings"] = {}
+        if guild_id not in config["trainings"]:
+            config["trainings"][guild_id] = {}
+
+        config["trainings"][guild_id][user_id] = {
+            "status": "PASSED",
+            "trainer": str(interaction.user),
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        save_config()
+
+        trainee = interaction.guild.get_member(self.trainee_id)
+        trainee_mention = trainee.mention if trainee else f"<@{self.trainee_id}>"
+
+        embed = discord.Embed(
+            title=f"{EMOJIS['success']} Training Passed!",
+            description=f"{trainee_mention} has successfully passed staff training!",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name=f"{EMOJIS['user']} Trainee", value=trainee_mention, inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Trainer", value=interaction.user.mention, inline=True)
+        embed.set_footer(text="SLS Helper • Staff Training System")
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        await audit(interaction.guild, f"Staff Training Passed: {trainee_mention} | Trainer: {interaction.user}")
+
+    @discord.ui.button(label="Fail Training", style=discord.ButtonStyle.red, custom_id="fail_training_btn")
+    async def fail_training(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.trainer_id and interaction.user.id != interaction.guild.owner_id and interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(f"{EMOJIS['error']} Only the designated trainer can complete this evaluation.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        user_id = str(self.trainee_id)
+
+        if "trainings" not in config:
+            config["trainings"] = {}
+        if guild_id not in config["trainings"]:
+            config["trainings"][guild_id] = {}
+
+        config["trainings"][guild_id][user_id] = {
+            "status": "FAILED",
+            "trainer": str(interaction.user),
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        save_config()
+
+        trainee = interaction.guild.get_member(self.trainee_id)
+        trainee_mention = trainee.mention if trainee else f"<@{self.trainee_id}>"
+
+        embed = discord.Embed(
+            title=f"{EMOJIS['demo']} Training Failed",
+            description=f"{trainee_mention} did not pass staff training at this time.",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name=f"{EMOJIS['user']} Trainee", value=trainee_mention, inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Trainer", value=interaction.user.mention, inline=True)
+        embed.set_footer(text="SLS Helper • Staff Training System")
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        await audit(interaction.guild, f"Staff Training Failed: {trainee_mention} | Trainer: {interaction.user}")
+
+
+@bot.command(name="train")
+@commands.guild_only()
+async def train(ctx, trainee: discord.Member):
+    """Starts an interactive training module for a staff member."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only staff supervisors can initiate training sessions.", color=discord.Color.red()))
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['shield']} Staff Training Session Initiated",
+        description=f"Welcome {trainee.mention} to your official staff training session!",
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['user']} Trainee Info",
+        value=f"{trainee.mention}\nID: `{trainee.id}`",
+        inline=True
+    )
+    embed.add_field(
+        name=f"{EMOJIS['shield']} Trainer",
+        value=ctx.author.mention,
+        inline=True
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['gear']} Training Modules & Curriculum",
+        value=(
+            f"{EMOJIS['bullet']} **1. Moderation Quotas:** Max 3 kicks/bans per 24 hours.\n"
+            f"{EMOJIS['bullet']} **2. Moderation Tools:** Use `>warn`, `>mute`, `>clear`, `>kick`, and `>ban` appropriately.\n"
+            f"{EMOJIS['bullet']} **3. Ticket Management:** Assist users politely and close tickets using button controls.\n"
+            f"{EMOJIS['bullet']} **4. Hierarchy & Respect:** Do not attempt commands on higher ranks."
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text=f"{ctx.guild.name} • Trainer Controls Below", icon_url=ctx.author.display_avatar.url)
+
+    view = TrainingControlView(trainee_id=trainee.id, trainer_id=ctx.author.id)
+    await ctx.send(embed=embed, view=view)
+    await audit(interaction=ctx.guild, message=f"Staff Training Started: {trainee} ({trainee.id}) by {ctx.author}")
+
+
+@bot.command(name="trainings")
+@commands.guild_only()
+async def trainings(ctx, member: discord.Member = None):
+    """Checks the training status of a staff member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    m = member or ctx.author
+    guild_id = str(ctx.guild.id)
+    user_id = str(m.id)
+
+    record = config.get("trainings", {}).get(guild_id, {}).get(user_id)
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['audit']} Staff Training Record",
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=m.display_avatar.url)
+
+    if not record:
+        embed.description = f"{m.mention} has no recorded training sessions yet."
+    else:
+        status_emoji = EMOJIS['success'] if record['status'] == "PASSED" else EMOJIS['demo']
+        embed.description = f"Training status for {m.mention}:"
+        embed.add_field(name=f"{status_emoji} Status", value=f"**{record['status']}**", inline=True)
+        embed.add_field(name=f"{EMOJIS['shield']} Evaluated By", value=record['trainer'], inline=True)
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    await ctx.reply(embed=embed)
+
+
+# =========================
+# MANAGEMENT & STAFF COMMANDS
+# =========================
+
+@bot.command(name="promo")
+@commands.guild_only()
+async def promo(ctx, staff: discord.Member, target_role: discord.Role = None):
+    """Promotes a staff member."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if target_role is None:
+        ladder = config.get("rank_ladders", {}).get(str(ctx.guild.id))
+        if not ladder:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} No rank ladder configured. Add roles using `>ranks add @role`", color=discord.Color.orange()))
+            return
+
+        user_role_ids = [r.id for r in staff.roles]
+        matched_index = -1
+        
+        for idx, r_id in enumerate(ladder):
+            if r_id in user_role_ids:
+                matched_index = idx
+
+        next_index = matched_index + 1
+        if next_index >= len(ladder):
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} {staff.mention} is already at the highest rank on the ladder!", color=discord.Color.orange()))
+            return
+
+        target_role = ctx.guild.get_role(ladder[next_index])
+
+    await change_staff_role(ctx, staff, target_role, "promote")
+
+
+@bot.command(name="demo")
+@commands.guild_only()
+async def demo(ctx, staff: discord.Member, target_role: discord.Role = None):
+    """Demotes a staff member from their highest ladder rank."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if target_role is None:
+        ladder = config.get("rank_ladders", {}).get(str(ctx.guild.id))
+        if not ladder:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} No rank ladder configured. Add roles using `>ranks add @role`", color=discord.Color.orange()))
+            return
+
+        user_role_ids = [r.id for r in staff.roles]
+        
+        matched_index = -1
+        for idx, r_id in enumerate(ladder):
+            if r_id in user_role_ids:
+                matched_index = idx
+
+        if matched_index == -1:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} {staff.mention} does not have any rank from the ladder!", color=discord.Color.orange()))
+            return
+
+        target_role = ctx.guild.get_role(ladder[matched_index])
+
+    await change_staff_role(ctx, staff, target_role, "demote")
+
+
+@bot.command(name="super")
+@commands.guild_only()
+async def super_cmd(ctx, member: discord.Member):
+    """Assigns the supervisor role."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    role_id = guild_setting("supervisor_roles", ctx.guild.id)
+    if not role_id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} Supervisor role not set up.", color=discord.Color.orange()))
+        return
+    assigned_role = ctx.guild.get_role(int(role_id))
+    if not assigned_role:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Configured supervisor role no longer exists.", color=discord.Color.red()))
+        return
+    await member.add_roles(assigned_role, reason=f"Supervisor assigned by {ctx.author}")
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Assigned supervisor role to {member.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="superintro")
+@commands.guild_only()
+async def superintro(ctx):
+    """Deletes the trigger message and introduces supervisor commands."""
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+    if not user_is_supervisor(ctx):
+        err_msg = await ctx.send(embed=discord.Embed(description=f"{EMOJIS['error']} Only staff supervisors can use this command.", color=discord.Color.red()))
+        await err_msg.delete(delay=5)
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['welcome']} Welcome Staff Supervisor!",
+        description=(
+            f"Welcome to the **SLS Helper Supervisor System**! {EMOJIS['shield']}\n"
+            "As a Supervisor, you have permission to manage the staff hierarchy using automated rank ladder commands."
+        ),
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['promo']} `>promo @member [@role]`",
+        value=(
+            f"{EMOJIS['bullet']} Promotes a staff member.\n"
+            f"{EMOJIS['bullet']} **Auto Ladder:** If no role is given, advances them to the next step up."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['demo']} `>demo @member [@role]`",
+        value=(
+            f"{EMOJIS['bullet']} Demotes a staff member.\n"
+            f"{EMOJIS['bullet']} **Auto Ladder:** If no role is given, strips their highest rank to drop them down."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['gear']} `>train @member`",
+        value=f"{EMOJIS['bullet']} Starts an interactive staff training session.",
+        inline=False
+    )
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name} • SLS Helper Guide", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="staffintro")
+@commands.guild_only()
+async def staffintro(ctx):
+    """Deletes the trigger message and introduces staff moderation commands."""
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+    if not user_is_staff(ctx):
+        err_msg = await ctx.send(embed=discord.Embed(description=f"{EMOJIS['error']} Only staff members can use this command.", color=discord.Color.red()))
+        await err_msg.delete(delay=5)
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['welcome']} Welcome to the SLS Helper Staff Team!",
+        description=(
+            f"Hello {ctx.author.mention}! Thank you for keeping our community safe and active. {EMOJIS['shield']}\n"
+            "Here is a quick introduction to your staff moderation tools and commands."
+        ),
+        color=discord.Color.green(),
+        timestamp=discord.utils.utcnow()
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['warning']} Moderation & Safety Commands",
+        value=(
+            f"{EMOJIS['bullet']} `>kick @member [reason]` — Kicks a disruptive user (Max 3/24h).\n"
+            f"{EMOJIS['bullet']} `>ban @member [reason]` — Permanently bans a rule-breaker (Max 3/24h).\n"
+            f"{EMOJIS['bullet']} `>unban <user_id> [reason]` — Unbans a user by ID.\n"
+            f"{EMOJIS['bullet']} `>mute @member [reason]` — Times out a user for 10 minutes.\n"
+            f"{EMOJIS['bullet']} `>unmute @member [reason]` — Removes timeout from a member.\n"
+            f"{EMOJIS['bullet']} `>warn @member [reason]` — Issues a formal warning.\n"
+            f"{EMOJIS['bullet']} `>unwarn @member [index]` — Removes a warning.\n"
+            f"{EMOJIS['bullet']} `>clear [amount]` — Purges chat messages."
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name} • SLS Helper Guide", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="staff")
+@commands.guild_only()
+async def staff_cmd(ctx, member: discord.Member):
+    """Assigns Staff Team and Trial Mod/Moderator roles automatically."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    staff_team_role = discord.utils.find(lambda r: "staff team" in r.name.lower(), ctx.guild.roles)
+    trial_mod_role = discord.utils.find(lambda r: "trial mod" in r.name.lower() or "trial moderator" in r.name.lower(), ctx.guild.roles)
+
+    found_roles = [r for r in [staff_team_role, trial_mod_role] if r]
+    if not found_roles:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Could not find 'Staff Team' or 'Trial Mod/Moderator' roles in this server.", color=discord.Color.red()))
+        return
+
+    await member.add_roles(*found_roles, reason=f"Staff roles assigned by {ctx.author}")
+    assigned_mentions = ", ".join([r.mention for r in found_roles])
+    
+    embed = discord.Embed(
+        title=f"{EMOJIS['success']} Staff Team Roles Assigned",
+        description=f"Successfully assigned {assigned_mentions} to {member.mention}.",
+        color=discord.Color.green(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"Action by {ctx.author}", icon_url=ctx.author.display_avatar.url)
+    await ctx.reply(embed=embed)
+    await audit(ctx.guild, f"Staff roles ({assigned_mentions}) given to {member} ({member.id}) by {ctx.author}")
+
+
+@bot.command(name="role")
+@commands.guild_only()
+async def role_cmd(ctx, member: discord.Member, target_role: discord.Role):
+    """Toggles a role on a member, ensuring users cannot manage roles higher or equal to their own."""
+    is_owner = (ctx.author.id == OWNER_ID or ctx.author.id == ctx.guild.owner_id)
+
+    if not is_owner and not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if target_role.position >= ctx.guild.me.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I cannot manage that role because it is higher than or equal to my highest role.", color=discord.Color.red()))
+        return
+
+    if not is_owner and target_role.position >= ctx.author.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot manage a role that is higher than or equal to your own highest role.", color=discord.Color.red()))
+        return
+
+    if target_role in member.roles:
+        try:
+            await member.remove_roles(target_role, reason=f"Role toggled off by {ctx.author}")
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['demo']} Removed {target_role.mention} from {member.mention}.", color=discord.Color.red()))
+        except discord.Forbidden:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to remove that role.", color=discord.Color.red()))
+    else:
+        try:
+            await member.add_roles(target_role, reason=f"Role toggled on by {ctx.author}")
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['promo']} Added {target_role.mention} to {member.mention}.", color=discord.Color.green()))
+        except discord.Forbidden:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Missing permissions to assign that role.", color=discord.Color.red()))
+
+
+@bot.command(name="steal")
+@commands.guild_only()
+async def steal(ctx, emoji: str, name: str = None):
+    """Steals an emoji into the server."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    import re
+    match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", emoji)
+    if not match:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Invalid custom emoji.", color=discord.Color.red()))
+        return
+    animated, e_name, e_id = match.groups()
+    url = f"https://cdn.discordapp.com/emojis/{e_id}.{'gif' if animated=='a' else 'png'}?v=1"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            image_bytes = await resp.read()
+    new_emoji = await ctx.guild.create_custom_emoji(name=name or e_name, image=image_bytes)
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Stole and added {new_emoji}!", color=discord.Color.green()))
+
+
+# =========================
+# TICKET SETUP COMMANDS
+# =========================
+
+@bot.command(name="sendticket")
+@commands.guild_only()
+async def sendticket(ctx, channel: discord.TextChannel = None):
+    """Deploys the persistent ticket selection dropdown panel to a channel."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only owners or supervisors can deploy the ticket panel.", color=discord.Color.red()))
+        return
+
+    target_channel = channel or ctx.channel
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['ticket']} Support Ticket Center",
+        description=(
+            f"Welcome to the **{ctx.guild.name}** Support Center! {EMOJIS['shield']}\n\n"
+            f"Please select a category from the dropdown menu below to open a private ticket with our staff team:\n\n"
+            f"{EMOJIS['bullet']} {EMOJIS['support']} **Support** — General help & assistance\n"
+            f"{EMOJIS['bullet']} {EMOJIS['purchase']} **Purchase** — Purchase service requests\n"
+            f"{EMOJIS['bullet']} {EMOJIS['partner']} **Partnership** — Server partnership requests"
+        ),
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="SLS Helper • Support System", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+
+    await target_channel.send(embed=embed, view=TicketDropdownView())
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Successfully deployed ticket panel to {target_channel.mention}!", color=discord.Color.green()))
+
+
+@bot.command(name="setstaffrole")
+@commands.guild_only()
+async def setstaffrole(ctx, role: discord.Role):
+    """Sets the staff role that can view, claim, and get pinged in tickets."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    if "staff_roles" not in config:
+        config["staff_roles"] = {}
+    config["staff_roles"][str(ctx.guild.id)] = role.id
+    save_config()
+
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Ticket staff role set to {role.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setcategory")
+@commands.guild_only()
+async def setcategory(ctx, ticket_type: str, category: discord.CategoryChannel):
+    """Sets the Discord category for a specific ticket type (support, purchase, partnership)."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    ticket_type = ticket_type.lower()
+    if ticket_type not in ["support", "purchase", "partnership"]:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Invalid type! Choose from: `support`, `purchase`, `partnership`.\nExample: `>setcategory support #CategoryName`", color=discord.Color.red()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    if "ticket_categories" not in config or not isinstance(config["ticket_categories"], dict):
+        config["ticket_categories"] = {}
+    
+    if guild_id not in config["ticket_categories"] or not isinstance(config["ticket_categories"][guild_id], dict):
+        config["ticket_categories"][guild_id] = {}
+
+    config["ticket_categories"][guild_id][ticket_type] = category.id
+    save_config()
+
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Category for **{ticket_type.capitalize()}** tickets set to **{category.name}**.", color=discord.Color.green()))
+
+
+# =========================
+# MODERATION COMMANDS
+# =========================
+
+@bot.command(name="kick")
+@commands.guild_only()
+async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Kicks a member (Staff capped at 3 per 24 hours with hierarchy checks)."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.guild.owner_id or member.id == OWNER_ID:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot kick the server owner or bot owner.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot kick yourself.", color=discord.Color.orange()))
+        return
+
+    if not user_is_owner(ctx) and member.top_role.position >= ctx.author.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot kick {member.mention} because their highest role is higher than or equal to yours.", color=discord.Color.red()))
+        return
+
+    allowed, count = check_and_increment_action_limit(ctx, "kicks", limit=3)
+    if not allowed:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You have reached your limit of **3 kicks per 24 hours**.", color=discord.Color.orange()))
+        return
+
+    try:
+        await member.kick(reason=f"{reason} (Kicked by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Kicked {member.mention} | Reason: {reason}", color=discord.Color.orange()))
+        await audit(ctx.guild, f"Member kicked: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to kick that member.", color=discord.Color.red()))
+
+
+@bot.command(name="ban")
+@commands.guild_only()
+async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Bans a member (Staff capped at 3 per 24 hours with hierarchy checks)."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.guild.owner_id or member.id == OWNER_ID:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot ban the server owner or bot owner.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot ban yourself.", color=discord.Color.orange()))
+        return
+
+    if not user_is_owner(ctx) and member.top_role.position >= ctx.author.top_role.position:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You cannot ban {member.mention} because their highest role is higher than or equal to yours.", color=discord.Color.red()))
+        return
+
+    allowed, count = check_and_increment_action_limit(ctx, "bans", limit=3)
+    if not allowed:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You have reached your limit of **3 bans per 24 hours**.", color=discord.Color.orange()))
+        return
+
+    try:
+        await member.ban(reason=f"{reason} (Banned by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Banned {member.mention} | Reason: {reason}", color=discord.Color.red()))
+        await audit(ctx.guild, f"Member banned: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to ban that member.", color=discord.Color.red()))
+
+
+@bot.command(name="unban")
+@commands.guild_only()
+async def unban(ctx, user_id: int, *, reason="No reason provided"):
+    """Unbans a user by their Discord User ID."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    try:
+        user = await bot.fetch_user(user_id)
+        await ctx.guild.unban(user, reason=f"{reason} (Unbanned by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Successfully unbanned {user.mention} (`{user.id}`) | Reason: {reason}", color=discord.Color.green()))
+        await audit(ctx.guild, f"User unbanned: {user} ({user.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.NotFound:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Could not find a banned user with ID `{user_id}`.", color=discord.Color.red()))
+    except discord.HTTPException:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Failed to unban the user.", color=discord.Color.red()))
+
+
+@bot.command(name="mute")
+@commands.guild_only()
+async def mute(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Timeouts a member for 10 minutes."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    from datetime import timedelta
+    try:
+        await member.timeout(timedelta(minutes=10), reason=f"{reason} (Muted by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Timed out {member.mention} for 10 minutes.", color=discord.Color.orange()))
+        await audit(ctx.guild, f"Member timed out: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to timeout that member.", color=discord.Color.red()))
+
+
+@bot.command(name="unmute")
+@commands.guild_only()
+async def unmute(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Removes timeout from a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    try:
+        await member.timeout(None, reason=f"{reason} (Unmuted by {ctx.author})")
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Removed timeout from {member.mention}.", color=discord.Color.green()))
+        await audit(ctx.guild, f"Member timeout removed: {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I lack permissions to unmute that member.", color=discord.Color.red()))
+
+
+@bot.command(name="warn")
+@commands.guild_only()
+async def warn(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Issues a formal warning to a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    if member.id == ctx.author.id or member.id == ctx.guild.owner_id:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot warn that user.", color=discord.Color.orange()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(member.id)
+
+    if "warnings" not in config:
+        config["warnings"] = {}
+    if guild_id not in config["warnings"]:
+        config["warnings"][guild_id] = {}
+    if user_id not in config["warnings"][guild_id]:
+        config["warnings"][guild_id][user_id] = []
+
+    config["warnings"][guild_id][user_id].append({
+        "reason": reason,
+        "moderator": str(ctx.author),
+        "timestamp": discord.utils.utcnow().isoformat()
+    })
+    save_config()
+
+    warn_count = len(config["warnings"][guild_id][user_id])
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['warning']} Member Warned",
+        description=f"{member.mention} has been warned.\n**Reason:** {reason}\n**Total Warnings:** {warn_count}",
+        color=discord.Color.orange(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"Moderator: {ctx.author}")
+    await ctx.reply(embed=embed)
+
+    try:
+        await member.send(embed=discord.Embed(title=f"{EMOJIS['warning']} You were warned in {ctx.guild.name}", description=f"**Reason:** {reason}", color=discord.Color.orange()))
+    except discord.HTTPException:
+        pass
+
+    await audit(ctx.guild, f"Member warned: {member} ({member.id}) | Reason: {reason} | Total: {warn_count} | By: {ctx.author}")
+
+
+@bot.command(name="unwarn")
+@commands.guild_only()
+async def unwarn(ctx, member: discord.Member, index: int = None):
+    """Removes a warning from a member."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(member.id)
+
+    if "warnings" not in config or guild_id not in config["warnings"] or user_id not in config["warnings"][guild_id] or not config["warnings"][guild_id][user_id]:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} {member.mention} has no warnings recorded.", color=discord.Color.orange()))
+        return
+
+    user_warns = config["warnings"][guild_id][user_id]
+
+    if index is None:
+        config["warnings"][guild_id][user_id] = []
+        save_config()
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared all warnings for {member.mention}.", color=discord.Color.green()))
+        await audit(ctx.guild, f"All warnings cleared for {member} ({member.id}) by {ctx.author}")
+    else:
+        if 1 <= index <= len(user_warns):
+            removed = user_warns.pop(index - 1)
+            save_config()
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Removed warning #{index} for {member.mention} (Reason: `{removed['reason']}`).", color=discord.Color.green()))
+            await audit(ctx.guild, f"Warning #{index} removed for {member} ({member.id}) by {ctx.author}")
+        else:
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Invalid warning index number.", color=discord.Color.red()))
+
+
+@bot.command(name="clear")
+@commands.guild_only()
+async def clear(ctx, amount: int = 5):
+    """Purges messages."""
+    if not user_is_staff(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+
+    await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared {amount} messages.", color=discord.Color.green()))
+    await msg.delete(delay=3)
+
+
+# =========================
+# UTILITY & INFO COMMANDS
+# =========================
+
+@bot.command(name="ping")
+@commands.guild_only()
+async def ping(ctx):
+    """Shows bot latency."""
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Pong! Latency: `{round(bot.latency * 1000)}ms`", color=THEME_BLUE))
+
+
+@bot.command(name="serverinfo")
+@commands.guild_only()
+async def serverinfo(ctx):
+    """Shows server info."""
+    g = ctx.guild
+    embed = discord.Embed(title=f"{EMOJIS['gear']} {g.name} Information", color=THEME_BLUE)
+    embed.add_field(name=f"{EMOJIS['user']} Owner", value=g.owner, inline=True)
+    embed.add_field(name=f"{EMOJIS['ladder']} Members", value=g.member_count, inline=True)
+    embed.add_field(name=f"{EMOJIS['success']} Created On", value=g.created_at.strftime("%Y-%m-%d"), inline=True)
+    await ctx.reply(embed=embed)
+
+
+@bot.command(name="userinfo")
+@commands.guild_only()
+async def userinfo(ctx, member: discord.Member = None):
+    """Shows user info."""
+    m = member or ctx.author
+    embed = discord.Embed(title=f"{EMOJIS['user']} {m} Info", color=m.color)
+    embed.set_thumbnail(url=m.display_avatar.url)
+    embed.add_field(name="ID", value=m.id, inline=True)
+    embed.add_field(name="Joined", value=m.joined_at.strftime("%Y-%m-%d") if m.joined_at else "N/A", inline=True)
+    await ctx.reply(embed=embed)
+
+
+@bot.command(name="avatar")
+@commands.guild_only()
+async def avatar(ctx, member: discord.Member = None):
+    """Shows user avatar."""
+    m = member or ctx.author
+    embed = discord.Embed(title=f"{EMOJIS['user']} Avatar for {m}", color=THEME_BLUE)
+    embed.set_image(url=m.display_avatar.url)
+    await ctx.reply(embed=embed)
+
+
+# =========================
+# FUN & MISC COMMANDS
+# =========================
+
+@bot.command(name="coinflip")
+async def coinflip(ctx):
+    """Flips a coin."""
+    result = random.choice(["Heads", "Tails"])
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} The coin landed on: **{result}**", color=THEME_BLUE))
+
+
+@bot.command(name="roll")
+async def roll(ctx):
+    """Rolls a dice (1-6)."""
+    result = random.randint(1, 6)
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} You rolled a **{result}**!", color=THEME_BLUE))
+
+
+# =========================
+# SETUP COMMANDS (RANKS ADD / CLEAR)
+# =========================
+
+# =========================
+# ECONOMY COMMANDS
+# =========================
+
+ECONOMY_EMOJI = EMOJIS["purchase"]
+ECONOMY_ITEMS = {
+    "laptop": {"price": 800, "description": "A shiny laptop. Sell it later if you need cash."},
+    "phone": {"price": 450, "description": "A new phone for your collection."},
+    "watch": {"price": 250, "description": "A stylish watch."},
+    "trophy": {"price": 1200, "description": "A trophy to show off your wins."},
+    "cookie": {"price": 50, "description": "A tasty cookie. Restore your luck (coming soon)."},
+}
+
+
+def economy_account(ctx):
+    """Return a persistent account scoped to this server and member."""
+    economy = config.setdefault("economy", {})
+    guild_accounts = economy.setdefault(str(ctx.guild.id), {})
+    account = guild_accounts.setdefault(str(ctx.author.id), {
+        "wallet": 0, "bank": 0, "bank_level": 0, "inventory": [], "cooldowns": {}
+    })
+    account.setdefault("wallet", 0)
+    account.setdefault("bank", 0)
+    account.setdefault("bank_level", 0)
+    account.setdefault("inventory", [])
+    account.setdefault("cooldowns", {})
+    return account
+
+
+def economy_member_account(guild, member):
+    economy = config.setdefault("economy", {})
+    guild_accounts = economy.setdefault(str(guild.id), {})
+    return guild_accounts.setdefault(str(member.id), {
+        "wallet": 0, "bank": 0, "bank_level": 0, "inventory": [], "cooldowns": {}
+    })
+
+
+def economy_embed(title, description=None, color=None):
+    return discord.Embed(
+        title=f"{ECONOMY_EMOJI} {title}", description=description,
+        color=color or THEME_BLUE
+    )
+
+
+def economy_bank_limit(account):
+    return 10000 + int(account.get("bank_level", 0)) * 5000
+
+
+def economy_cooldown(account, action, seconds):
+    import time
+    now = time.time()
+    expires = float(account["cooldowns"].get(action, 0)) + seconds
+    if now < expires:
+        return int(expires - now) + 1
+    account["cooldowns"][action] = now
+    return 0
+
+
+@bot.command(name="balance", aliases=["bal", "wallet"])
+@commands.guild_only()
+async def balance(ctx, member: discord.Member = None):
+    """Show your wallet and bank, or another member's balance."""
+    member = member or ctx.author
+    account = economy_member_account(ctx.guild, member)
+    embed = economy_embed(f"{member.display_name}'s Balance", color=THEME_BLUE)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name=f"{ECONOMY_EMOJI} Wallet", value=f"**{account['wallet']:,}** coins", inline=True)
+    embed.add_field(name="🏦 Bank", value=f"**{account['bank']:,} / {economy_bank_limit(account):,}** coins", inline=True)
+    embed.add_field(name="💰 Total", value=f"**{account['wallet'] + account['bank']:,}** coins", inline=False)
+    save_config()
+    await ctx.reply(embed=embed)
+
+
+@bot.command(name="daily")
+@commands.guild_only()
+async def daily(ctx):
+    account = economy_account(ctx)
+    remaining = economy_cooldown(account, "daily", 86400)
+    if remaining:
+        await ctx.reply(embed=economy_embed("Daily Reward", f"{EMOJIS['warning']} Come back in **{remaining // 3600}h {(remaining % 3600) // 60}m**.", discord.Color.orange()))
+        return
+    amount = random.randint(250, 500)
+    account["wallet"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Daily Reward Collected", f"{EMOJIS['success']} You received **{amount:,} coins**. Your wallet now has **{account['wallet']:,}** coins!", discord.Color.green()))
+
+
+@bot.command(name="work", aliases=["job"])
+@commands.guild_only()
+async def work(ctx):
+    account = economy_account(ctx)
+    remaining = economy_cooldown(account, "work", 3600)
+    if remaining:
+        await ctx.reply(embed=economy_embed("Work", f"{EMOJIS['warning']} Your next shift starts in **{remaining // 60}m {remaining % 60}s**.", discord.Color.orange()))
+        return
+    jobs = ["delivered packages", "fixed a computer", "served drinks", "walked some dogs", "helped at the market"]
+    amount = random.randint(80, 220)
+    account["wallet"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Shift Complete", f"You {random.choice(jobs)} and earned **{amount:,} coins**! {EMOJIS['success']}", discord.Color.green()))
+
+
+@bot.command(name="beg")
+@commands.guild_only()
+async def beg(ctx):
+    account = economy_account(ctx)
+    remaining = economy_cooldown(account, "beg", 300)
+    if remaining:
+        await ctx.reply(embed=economy_embed("Beg", f"{EMOJIS['warning']} Try again in **{remaining}s**.", discord.Color.orange()))
+        return
+    amount = random.randint(0, 100)
+    account["wallet"] += amount
+    save_config()
+    if amount:
+        message = f"A kind passerby gave you **{amount} coins**."
+    else:
+        message = "Nobody had spare change this time. Better luck next time!"
+    await ctx.reply(embed=economy_embed("A Little Help", message, discord.Color.green()))
+
+
+@bot.command(name="crime")
+@commands.guild_only()
+async def crime(ctx):
+    account = economy_account(ctx)
+    remaining = economy_cooldown(account, "crime", 1800)
+    if remaining:
+        await ctx.reply(embed=economy_embed("Crime", f"{EMOJIS['warning']} Lay low for **{remaining // 60}m {remaining % 60}s**.", discord.Color.orange()))
+        return
+    if random.random() < 0.55:
+        amount = random.randint(100, 350)
+        account["wallet"] += amount
+        result = f"You got away with **{amount:,} coins**! {EMOJIS['success']}"
+        color = discord.Color.green()
+    else:
+        amount = min(account["wallet"], random.randint(50, 200))
+        account["wallet"] -= amount
+        result = f"You got caught and paid a **{amount:,}-coin fine**. {EMOJIS['warning']}"
+        color = discord.Color.red()
+    save_config()
+    await ctx.reply(embed=economy_embed("Risky Business", result, color))
+
+
+@bot.command(name="deposit", aliases=["dep"])
+@commands.guild_only()
+async def deposit(ctx, amount: str):
+    account = economy_account(ctx)
+    amount = account["wallet"] if amount.lower() == "all" else int(amount)
+    if amount <= 0 or amount > account["wallet"]:
+        await ctx.reply(embed=economy_embed("Deposit", f"{EMOJIS['error']} Enter an amount up to your wallet balance (**{account['wallet']:,}**).", discord.Color.red()))
+        return
+    available = economy_bank_limit(account) - account["bank"]
+    if amount > available:
+        await ctx.reply(embed=economy_embed("Bank Full", f"Your bank has room for **{available:,}** more coins. Upgrade it with `>bankupgrade`.", discord.Color.orange()))
+        return
+    account["wallet"] -= amount
+    account["bank"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Deposit Complete", f"{EMOJIS['success']} Deposited **{amount:,} coins** into your bank."))
+
+
+@bot.command(name="withdraw", aliases=["with"])
+@commands.guild_only()
+async def withdraw(ctx, amount: str):
+    account = economy_account(ctx)
+    amount = account["bank"] if amount.lower() == "all" else int(amount)
+    if amount <= 0 or amount > account["bank"]:
+        await ctx.reply(embed=economy_embed("Withdraw", f"{EMOJIS['error']} Enter an amount up to your bank balance (**{account['bank']:,}**).", discord.Color.red()))
+        return
+    account["bank"] -= amount
+    account["wallet"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Withdrawal Complete", f"{EMOJIS['success']} Withdrew **{amount:,} coins** to your wallet."))
+
+
+@bot.command(name="pay", aliases=["give", "transfer"])
+@commands.guild_only()
+async def pay(ctx, member: discord.Member, amount: int):
+    account = economy_account(ctx)
+    if member.bot or member == ctx.author or amount <= 0 or account["wallet"] < amount:
+        await ctx.reply(embed=economy_embed("Transfer", f"{EMOJIS['error']} Choose another member and a positive amount you can afford.", discord.Color.red()))
+        return
+    recipient = economy_member_account(ctx.guild, member)
+    account["wallet"] -= amount
+    recipient["wallet"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Transfer Complete", f"{EMOJIS['success']} Sent **{amount:,} coins** to {member.mention}."))
+
+
+@bot.command(name="leaderboard", aliases=["lb", "rich"])
+@commands.guild_only()
+async def leaderboard(ctx):
+    accounts = config.setdefault("economy", {}).get(str(ctx.guild.id), {})
+    ranked = sorted(accounts.items(), key=lambda pair: int(pair[1].get("wallet", 0)) + int(pair[1].get("bank", 0)), reverse=True)[:10]
+    if not ranked:
+        await ctx.reply(embed=economy_embed("Richest Members", "No economy accounts yet. Try `>daily` to get started."))
+        return
+    rows = []
+    for rank, (user_id, account) in enumerate(ranked, 1):
+        total = int(account.get("wallet", 0)) + int(account.get("bank", 0))
+        rows.append(f"**{rank}.** <@{user_id}> — **{total:,}** coins")
+    await ctx.reply(embed=economy_embed("Server Rich List", "\n".join(rows)))
+
+
+@bot.command(name="shop", aliases=["store"])
+@commands.guild_only()
+async def shop(ctx):
+    embed = economy_embed("Shop", "Buy items with `>buy <item>`. Sell items with `>sell <item>`.\n")
+    for item, details in ECONOMY_ITEMS.items():
+        embed.add_field(name=f"{item.title()} — {details['price']:,} coins", value=details["description"], inline=False)
+    await ctx.reply(embed=embed)
+
+
+@bot.command(name="buy")
+@commands.guild_only()
+async def buy(ctx, item: str):
+    item = item.lower()
+    if item not in ECONOMY_ITEMS:
+        await ctx.reply(embed=economy_embed("Shop", f"{EMOJIS['error']} That item is unavailable. Use `>shop` to see the catalog.", discord.Color.red()))
+        return
+    account = economy_account(ctx)
+    price = ECONOMY_ITEMS[item]["price"]
+    if account["wallet"] < price:
+        await ctx.reply(embed=economy_embed("Not Enough Coins", f"You need **{price:,} coins**; your wallet has **{account['wallet']:,}**.", discord.Color.red()))
+        return
+    account["wallet"] -= price
+    account["inventory"].append(item)
+    save_config()
+    await ctx.reply(embed=economy_embed("Purchase Complete", f"{EMOJIS['success']} You bought a **{item}** for **{price:,} coins**."))
+
+
+@bot.command(name="inventory", aliases=["inv", "bag"])
+@commands.guild_only()
+async def inventory(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    account = economy_member_account(ctx.guild, member)
+    items = account.get("inventory", [])
+    counts = {item: items.count(item) for item in set(items)}
+    description = "\n".join(f"{ECONOMY_EMOJI} **{item.title()}** × {count}" for item, count in sorted(counts.items())) or "Your inventory is empty. Visit `>shop`!"
+    await ctx.reply(embed=economy_embed(f"{member.display_name}'s Inventory", description))
+
+
+@bot.command(name="sell")
+@commands.guild_only()
+async def sell(ctx, item: str):
+    item = item.lower()
+    account = economy_account(ctx)
+    if item not in ECONOMY_ITEMS or item not in account["inventory"]:
+        await ctx.reply(embed=economy_embed("Sell Item", f"{EMOJIS['error']} You don't own that item. Check `>inventory`.", discord.Color.red()))
+        return
+    account["inventory"].remove(item)
+    amount = ECONOMY_ITEMS[item]["price"] // 2
+    account["wallet"] += amount
+    save_config()
+    await ctx.reply(embed=economy_embed("Item Sold", f"{EMOJIS['success']} Sold **{item}** for **{amount:,} coins**."))
+
+
+@bot.command(name="bankupgrade", aliases=["upgradebank"])
+@commands.guild_only()
+async def bankupgrade(ctx):
+    account = economy_account(ctx)
+    cost = 2000 + int(account["bank_level"]) * 2000
+    if account["wallet"] < cost:
+        await ctx.reply(embed=economy_embed("Bank Upgrade", f"Upgrade costs **{cost:,} coins**. Your wallet has **{account['wallet']:,}**.", discord.Color.red()))
+        return
+    account["wallet"] -= cost
+    account["bank_level"] += 1
+    save_config()
+    await ctx.reply(embed=economy_embed("Bank Upgraded", f"{EMOJIS['success']} Capacity increased to **{economy_bank_limit(account):,} coins**!"))
+
+
+@bot.command(name="rob")
+@commands.guild_only()
+async def rob(ctx, member: discord.Member):
+    account = economy_account(ctx)
+    if OWNER_ID and member.id == OWNER_ID:
+        await ctx.reply(embed=economy_embed("Rob", f"{EMOJIS['shield']} The bot owner is protected from robbery.", discord.Color.orange()))
+        return
+    if member.bot or member == ctx.author:
+        await ctx.reply(embed=economy_embed("Rob", f"{EMOJIS['error']} Pick another server member.", discord.Color.red()))
+        return
+    remaining = economy_cooldown(account, "rob", 3600)
+    if remaining:
+        await ctx.reply(embed=economy_embed("Rob", f"{EMOJIS['warning']} Wait **{remaining // 60}m {remaining % 60}s** before trying again.", discord.Color.orange()))
+        return
+    victim = economy_member_account(ctx.guild, member)
+    if victim["wallet"] < 100:
+        await ctx.reply(embed=economy_embed("Rob", "That member doesn't have enough in their wallet."))
+        return
+    if random.random() < 0.45:
+        amount = min(victim["wallet"], random.randint(50, 250))
+        victim["wallet"] -= amount
+        account["wallet"] += amount
+        message, color = f"You stole **{amount:,} coins** from {member.mention}!", discord.Color.green()
+    else:
+        fine = min(account["wallet"], random.randint(50, 200))
+        account["wallet"] -= fine
+        victim["wallet"] += fine
+        message, color = f"You were caught! You paid {member.mention} a **{fine:,}-coin fine**.", discord.Color.red()
+    save_config()
+    await ctx.reply(embed=economy_embed("Robbery Result", message, color))
+
+
+@bot.command(name="slots")
+@commands.guild_only()
+async def slots(ctx, bet: int):
+    account = economy_account(ctx)
+    if bet <= 0 or bet > 5000 or bet > account["wallet"]:
+        await ctx.reply(embed=economy_embed("Slots", f"{EMOJIS['error']} Bet between 1 and 5,000 coins, up to your wallet balance.", discord.Color.red()))
+        return
+    symbols = ["🍒", "🍋", "🔔", "💎", "⭐"]
+    result = [random.choice(symbols) for _ in range(3)]
+    account["wallet"] -= bet
+    if result[0] == result[1] == result[2]:
+        winnings = bet * 5
+        account["wallet"] += winnings
+        message = f"{' | '.join(result)}\nJackpot! You won **{winnings:,} coins**."
+        color = discord.Color.green()
+    elif len(set(result)) == 2:
+        winnings = bet * 2
+        account["wallet"] += winnings
+        message = f"{' | '.join(result)}\nTwo match! You won **{winnings:,} coins**."
+        color = discord.Color.green()
+    else:
+        message = f"{' | '.join(result)}\nNo match this time. You lost **{bet:,} coins**."
+        color = discord.Color.red()
+    save_config()
+    await ctx.reply(embed=economy_embed("Slot Machine", message, color))
+
+
+@bot.command(name="betflip")
+@commands.guild_only()
+async def betflip(ctx, choice: str, bet: int):
+    account = economy_account(ctx)
+    choice = choice.lower()
+    if choice not in ("heads", "tails") or bet <= 0 or bet > account["wallet"]:
+        await ctx.reply(embed=economy_embed("Coinflip Bet", f"{EMOJIS['error']} Use `>betflip <heads/tails> <amount>` with a valid wallet bet.", discord.Color.red()))
+        return
+    result = random.choice(["heads", "tails"])
+    if choice == result:
+        account["wallet"] += bet
+        message, color = f"It was **{result}**! You won **{bet:,} coins**.", discord.Color.green()
+    else:
+        account["wallet"] -= bet
+        message, color = f"It was **{result}**. You lost **{bet:,} coins**.", discord.Color.red()
+    save_config()
+    await ctx.reply(embed=economy_embed("Coinflip Bet", message, color))
+
+
+@bot.command(name="economy")
+@commands.guild_only()
+async def economy_help(ctx):
+    description = (
+        "`>balance [@member]` · `>daily` · `>work` · `>beg` · `>crime`\n"
+        "`>deposit <amount/all>` · `>withdraw <amount/all>` · `>pay @member <amount>`\n"
+        "`>leaderboard` · `>shop` · `>buy <item>` · `>sell <item>` · `>inventory [@member]`\n"
+        "`>bankupgrade` · `>rob @member` · `>slots <bet>` · `>betflip <heads/tails> <bet>`\n\n"
+        f"All balances are saved per server. Currency: {ECONOMY_EMOJI}"
+    )
+    if OWNER_ID and ctx.author.id == OWNER_ID:
+        description += (
+            "\n\n**Bot owner (per-server):** `>addmoney @member <amount> [wallet/bank]` · "
+            "`>removemoney @member <amount> [wallet/bank]` · `>setmoney @member <amount> [wallet/bank]` · "
+            "`>resetmoney @member` · `>addbank @member <amount>` · `>setbank @member <amount>` · `>reseteco @member`"
+        )
+    embed = economy_embed("Economy Commands", description)
+    await ctx.reply(embed=embed)
+
+
+async def owner_economy_reply(ctx, title, description, color=discord.Color.green()):
+    await ctx.reply(embed=economy_embed(title, description, color))
+
+
+@bot.command(name="addmoney", aliases=["addcash"])
+@commands.guild_only()
+async def addmoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: add coins to a member's wallet or bank in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>addmoney @member <positive amount> [wallet/bank]`.", discord.Color.orange())
+        return
+    if pocket == "bank" and account["bank"] + amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"That exceeds the member's bank limit of **{economy_bank_limit(account):,}**.", discord.Color.orange())
+        return
+    account[pocket] += amount
+    save_config()
+    await owner_economy_reply(ctx, "Money Added", f"{EMOJIS['success']} Added **{amount:,} coins** to {member.mention}'s {pocket}.")
+
+
+@bot.command(name="removemoney", aliases=["takemoney", "removecash"])
+@commands.guild_only()
+async def removemoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: remove coins from a member's wallet or bank in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>removemoney @member <positive amount> [wallet/bank]`.", discord.Color.orange())
+        return
+    removed = min(amount, account[pocket])
+    account[pocket] -= removed
+    save_config()
+    await owner_economy_reply(ctx, "Money Removed", f"Removed **{removed:,} coins** from {member.mention}'s {pocket}.")
+
+
+@bot.command(name="setmoney", aliases=["setcash"])
+@commands.guild_only()
+async def setmoney(ctx, member: discord.Member, amount: int, pocket: str = "wallet"):
+    """Bot owner: set a member's wallet or bank balance in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    pocket = pocket.lower()
+    account = economy_member_account(ctx.guild, member)
+    if amount < 0 or pocket not in ("wallet", "bank"):
+        await owner_economy_reply(ctx, "Usage", "Use `>setmoney @member <amount of 0 or more> [wallet/bank]`.", discord.Color.orange())
+        return
+    if pocket == "bank" and amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"The bank limit is **{economy_bank_limit(account):,}**. Upgrade the account or set its wallet instead.", discord.Color.orange())
+        return
+    account[pocket] = amount
+    save_config()
+    await owner_economy_reply(ctx, "Balance Set", f"Set {member.mention}'s {pocket} to **{amount:,} coins**.")
+
+
+@bot.command(name="addbank")
+@commands.guild_only()
+async def addbank(ctx, member: discord.Member, amount: int):
+    """Bot owner: add coins directly to a member's bank, respecting its capacity."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    if amount <= 0 or account["bank"] + amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"Enter a positive amount that fits the remaining **{economy_bank_limit(account) - account['bank']:,}** bank capacity.", discord.Color.orange())
+        return
+    account["bank"] += amount
+    save_config()
+    await owner_economy_reply(ctx, "Bank Funds Added", f"Added **{amount:,} coins** to {member.mention}'s bank.")
+
+
+@bot.command(name="setbank")
+@commands.guild_only()
+async def setbank(ctx, member: discord.Member, amount: int):
+    """Bot owner: set a member's bank balance without exceeding its capacity."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    if amount < 0 or amount > economy_bank_limit(account):
+        await owner_economy_reply(ctx, "Bank Capacity", f"Choose an amount from 0 to **{economy_bank_limit(account):,}**.", discord.Color.orange())
+        return
+    account["bank"] = amount
+    save_config()
+    await owner_economy_reply(ctx, "Bank Set", f"Set {member.mention}'s bank to **{amount:,} coins**.")
+
+
+@bot.command(name="resetmoney", aliases=["clearmoney"])
+@commands.guild_only()
+async def resetmoney(ctx, member: discord.Member):
+    """Bot owner: clear a member's wallet and bank balances in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    account = economy_member_account(ctx.guild, member)
+    account["wallet"] = 0
+    account["bank"] = 0
+    save_config()
+    await owner_economy_reply(ctx, "Balances Cleared", f"Cleared {member.mention}'s wallet and bank. Inventory and cooldowns were kept.", discord.Color.orange())
+
+
+@bot.command(name="reseteco", aliases=["resetaccount"])
+@commands.guild_only()
+async def reseteco(ctx, member: discord.Member):
+    """Bot owner: reset a member's entire economy account in this server."""
+    if not is_bot_owner(ctx):
+        await owner_economy_reply(ctx, "Owner Only", f"{EMOJIS['error']} This command is only for the configured bot owner.", discord.Color.red())
+        return
+    config.setdefault("economy", {}).setdefault(str(ctx.guild.id), {})[str(member.id)] = {
+        "wallet": 0, "bank": 0, "bank_level": 0, "inventory": [], "cooldowns": {}
+    }
+    save_config()
+    await owner_economy_reply(ctx, "Account Reset", f"Reset {member.mention}'s complete economy account in this server.", discord.Color.orange())
+
+@bot.group(invoke_without_command=True)
+@commands.guild_only()
+async def ranks(ctx):
+    """Shows current rank ladder configuration."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    ladder = config.get("rank_ladders", {}).get(str(ctx.guild.id), [])
+    ladder_str = " -> ".join([f"<@&{r_id}>" for r_id in ladder]) if ladder else "Not configured. Use `>ranks add @role`"
+    
+    embed = discord.Embed(
+        title=f"{EMOJIS['ladder']} Staff Rank Ladder",
+        description=f"**Current Order (Lowest to Highest):**\n{ladder_str}",
+        color=THEME_BLUE
+    )
+    await ctx.reply(embed=embed)
+
+
+@ranks.command(name="add")
+@commands.guild_only()
+async def ranks_add(ctx, role: discord.Role):
+    """Adds a role to the rank ladder sequence (lowest to highest)."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    if role.is_default() or role.managed:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} You cannot add that role to the ladder.", color=discord.Color.orange()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    if "rank_ladders" not in config:
+        config["rank_ladders"] = {}
+    if guild_id not in config["rank_ladders"]:
+        config["rank_ladders"][guild_id] = []
+
+    if role.id in config["rank_ladders"][guild_id]:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} That role is already in the rank ladder.", color=discord.Color.orange()))
+        return
+
+    config["rank_ladders"][guild_id].append(role.id)
+    save_config()
+
+    ladder = config["rank_ladders"][guild_id]
+    ladder_str = " -> ".join([f"<@&{r_id}>" for r_id in ladder])
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['success']} Rank Added to Ladder",
+        description=f"Added {role.mention} successfully!\n\n**Current Ladder:**\n{ladder_str}",
+        color=discord.Color.green()
+    )
+    await ctx.reply(embed=embed)
+
+
+@ranks.command(name="clear")
+@commands.guild_only()
+async def ranks_clear(ctx):
+    """Clears the entire rank ladder configuration."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    guild_id = str(ctx.guild.id)
+    if "rank_ladders" in config and guild_id in config["rank_ladders"]:
+        config["rank_ladders"][guild_id] = []
+        save_config()
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['success']} Rank Ladder Cleared",
+        description="The rank ladder sequence has been reset.",
+        color=discord.Color.red()
+    )
+    await ctx.reply(embed=embed)
+
+
+@bot.command(name="setstaffsupervisor")
+@commands.guild_only()
+async def setstaffsupervisor(ctx, assigned_role: discord.Role):
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    config["supervisor_roles"][str(ctx.guild.id)] = assigned_role.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Supervisor role set to {assigned_role.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setpromodemo")
+@commands.guild_only()
+async def setpromodemo(ctx, channel: discord.TextChannel):
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    config["promodemo_channels"][str(ctx.guild.id)] = channel.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Promo channel set to {channel.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setaudit")
+@commands.guild_only()
+async def setaudit(ctx, channel: discord.TextChannel):
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+
+    config["audit_channels"][str(ctx.guild.id)] = channel.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Audit channel set to {channel.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setlogchan")
+@commands.guild_only()
+async def setlogchan(ctx, channel: discord.TextChannel):
+    """Sets the channel for server event embed logs."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
         return
     try:
-        result = eval(code)
-        if asyncio.iscoroutine(result):
-            result = await result
-        await ctx.reply(f"```python\n{result}\n```")
-    except Exception as e:
-        await ctx.reply(f"```python\nError: {e}\n```")
+        existing_hooks = await channel.webhooks()
+        webhook = discord.utils.find(lambda item: item.name == "SLS Helper Event Logs", existing_hooks)
+        if webhook is None:
+            webhook = await channel.create_webhook(name="SLS Helper Event Logs", reason=f"Configured by {ctx.author}")
+    except discord.Forbidden:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I need Manage Webhooks permission to set up event logging in that channel.", color=discord.Color.red()))
+        return
+    except discord.HTTPException:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I couldn't create or find a logging webhook in that channel.", color=discord.Color.red()))
+        return
+
+    config.setdefault("log_channels", {})[str(ctx.guild.id)] = channel.id
+    config.setdefault("log_webhooks", {})[str(ctx.guild.id)] = webhook.id
+    LOG_WEBHOOKS[ctx.guild.id] = webhook
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Server event logs will be sent to {channel.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="setecochan")
+@commands.guild_only()
+async def setecochan(ctx, channel: discord.TextChannel):
+    """Restricts economy commands to the selected channel."""
+    if not user_is_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the bot owner or server owner can use this command.", color=discord.Color.red()))
+        return
+    config.setdefault("economy_channels", {})[str(ctx.guild.id)] = channel.id
+    save_config()
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Economy commands can now only be used in {channel.mention}.", color=discord.Color.green()))
+
+
+@bot.command(name="anc")
+@commands.guild_only()
+async def anc(ctx):
+    """Bot owner: announce custom bot commissions with the ticket selector."""
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['purchase']} Get a Custom Discord Bot",
+        description=(
+            "Need a custom bot for your server? I build Discord bots tailored to your needs, "
+            "including moderation, economy, tickets, and custom features.\n\n"
+            f"{EMOJIS['bullet']} Click the menu below and select **Purchase** to create a ticket.\n"
+            f"{EMOJIS['bullet']} Tell me what features you want, and we can discuss your bot."
+        ),
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text=f"{ctx.guild.name} • Custom Bot Orders")
+    await ctx.send(
+        content="@everyone",
+        embed=embed,
+        view=TicketDropdownView(),
+        allowed_mentions=discord.AllowedMentions(everyone=True, users=False, roles=False)
+    )
+
+
+OWNER_PROTECTED_COMMANDS = {"shutdown", "restart", "enable", "disable", "maintenance", "ownerhelp"}
+
+
+@bot.command(name="ownerhelp")
+async def ownerhelp(ctx):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+    embed = discord.Embed(title=f"{EMOJIS['shield']} SLS Helper • Owner Commands", color=THEME_BLUE)
+    embed.add_field(name="Process", value="`>shutdown` — stop the bot\n`>restart` — restart the bot", inline=False)
+    embed.add_field(name="Access", value="`>disable <command>` — disable a command globally\n`>enable <command>` — re-enable it\n`>maintenance on/off` — block commands for everyone except you", inline=False)
+    embed.add_field(name="Presence & Info", value="`>setstatus <text>` — set the bot activity\n`>clearstatus` — clear its activity\n`>servercount` — show the number of servers", inline=False)
+    await ctx.reply(embed=embed)
 
 
 @bot.command(name="shutdown")
 async def shutdown(ctx):
-    """Shuts down the bot process safely (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
         return
-    await ctx.reply("🟦 Shutting down SLS Helper...")
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} SLS Helper is shutting down.", color=THEME_BLUE))
     await bot.close()
 
 
 @bot.command(name="restart")
 async def restart(ctx):
-    """Restarts the bot process (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
         return
-    await ctx.reply("🟦 Restarting SLS Helper process...")
-    os.execv(sys.executable, ['python'] + sys.argv)
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} SLS Helper is restarting.", color=THEME_BLUE))
+    await asyncio.sleep(1)
+    os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
-@bot.command(name="botservers")
-async def botservers(ctx):
-    """Lists all servers the bot is currently in (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+@bot.command(name="disable")
+async def disable_command(ctx, *, command_name: str):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
         return
-    guilds_str = "\n".join([f"🔹 **{g.name}** (`{g.id}`) — {g.member_count} members" for g in bot.guilds])
-    embed = discord.Embed(title="SLS Helper • Guild List", description=guilds_str, color=discord.Color.blue())
-    await ctx.reply(embed=embed)
-
-
-@bot.command(name="addcoins")
-async def addcoins(ctx, member: discord.Member, amount: int):
-    """Gives economy coins to a member (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+    command = bot.get_command(command_name.strip())
+    if command is None:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I couldn't find that command.", color=discord.Color.red()))
         return
-    econ = get_user_econ(member.id)
-    econ["wallet"] += amount
+    qualified_name = command.qualified_name.lower()
+    if qualified_name in OWNER_PROTECTED_COMMANDS:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} That owner recovery command cannot be disabled.", color=THEME_BLUE))
+        return
+    config.setdefault("disabled_commands", {})[qualified_name] = True
     save_config()
-    await ctx.reply(f"🟦 Added **{amount}** coins to {member.mention}'s wallet!")
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Disabled `>{qualified_name}` for everyone except you.", color=THEME_BLUE))
 
 
-@bot.command(name="removecoins")
-async def removecoins(ctx, member: discord.Member, amount: int):
-    """Removes economy coins from a member (Bot Owner Only)."""
-    if ctx.author.id != OWNER_ID:
+@bot.command(name="enable")
+async def enable_command(ctx, *, command_name: str):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
         return
-    econ = get_user_econ(member.id)
-    econ["wallet"] = max(0, econ["wallet"] - amount)
+    command = bot.get_command(command_name.strip())
+    if command is None:
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} I couldn't find that command.", color=discord.Color.red()))
+        return
+    qualified_name = command.qualified_name.lower()
+    config.setdefault("disabled_commands", {}).pop(qualified_name, None)
     save_config()
-    await ctx.reply(f"🟦 Removed **{amount}** coins from {member.mention}'s wallet!")
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Enabled `>{qualified_name}`.", color=THEME_BLUE))
 
 
-# =====================================================================
-# ECONOMY COMMANDS
-# =====================================================================
+@bot.command(name="maintenance")
+async def maintenance(ctx, mode: str):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+    mode = mode.lower()
+    if mode not in {"on", "off"}:
+        await ctx.reply(embed=discord.Embed(description="Use `>maintenance on` or `>maintenance off`.", color=THEME_BLUE))
+        return
+    config.setdefault("maintenance", {})["enabled"] = mode == "on"
+    save_config()
+    state = "enabled; commands are blocked for everyone except you" if mode == "on" else "disabled; commands are available again"
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Maintenance mode {state}.", color=THEME_BLUE))
 
-@bot.command(name="balance", aliases=["bal"])
-async def balance(ctx, member: discord.Member = None):
-    """Checks user coin balance."""
-    m = member or ctx.author
-    econ = get_user_econ(m.id)
-    emojis = get_emoji_dict(ctx.guild)
+
+@bot.command(name="setstatus")
+async def setstatus(ctx, *, activity: str):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+    activity = activity[:128]
+    await bot.change_presence(activity=discord.Game(name=activity))
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Bot activity set to **{discord.utils.escape_markdown(activity)}**.", color=THEME_BLUE))
+
+
+@bot.command(name="clearstatus")
+async def clearstatus(ctx):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+    await bot.change_presence(activity=None)
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['success']} Cleared the bot activity.", color=THEME_BLUE))
+
+
+@bot.command(name="servercount")
+async def servercount(ctx):
+    if not is_bot_owner(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Only the configured bot owner can use this command.", color=discord.Color.red()))
+        return
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['user']} SLS Helper is in **{len(bot.guilds)} servers**.", color=THEME_BLUE))
+
+
+@bot.command(name="staffsettings")
+@commands.guild_only()
+async def staffsettings(ctx):
+    """Displays current server staff configurations and rank ladder."""
+    if not user_is_supervisor(ctx):
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to view staff settings.", color=discord.Color.red()))
+        return
+
+    supervisor_id = guild_setting("supervisor_roles", ctx.guild.id)
+    staff_role_id = guild_setting("staff_roles", ctx.guild.id)
+    promo_id = guild_setting("promodemo_channels", ctx.guild.id)
+    audit_id = guild_setting("audit_channels", ctx.guild.id)
+    ladder = config.get("rank_ladders", {}).get(str(ctx.guild.id), [])
+
+    supervisor = ctx.guild.get_role(int(supervisor_id)) if supervisor_id else None
+    staff_role = ctx.guild.get_role(int(staff_role_id)) if staff_role_id else None
+    promo_channel = ctx.guild.get_channel(int(promo_id)) if promo_id else None
+    audit_channel = ctx.guild.get_channel(int(audit_id)) if audit_id else None
     
-    embed = discord.Embed(title=f"{emojis['coin']} Balance — {m.display_name}", color=discord.Color.blue())
-    embed.add_field(name="Wallet", value=f"**{econ['wallet']}** coins", inline=True)
-    embed.add_field(name="Bank", value=f"**{econ['bank']}** coins", inline=True)
-    embed.add_field(name="Net Worth", value=f"**{econ['wallet'] + econ['bank']}** coins", inline=True)
-    embed.set_thumbnail(url=m.display_avatar.url)
+    ladder_str = " -> ".join([f"<@&{r_id}>" for r_id in ladder]) if ladder else "Not configured (`>ranks add @role`)"
+
+    embed = discord.Embed(
+        title=f"{EMOJIS['gear']} SLS Helper • Server Settings",
+        color=THEME_BLUE,
+        timestamp=discord.utils.utcnow()
+    )
+
+    embed.add_field(
+        name=f"{EMOJIS['shield']} Supervisor Role",
+        value=supervisor.mention if supervisor else "Not configured (`>setstaffsupervisor @role`)",
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['shield']} Ticket Staff Role",
+        value=staff_role.mention if staff_role else "Not configured (`>setstaffrole @role`)",
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['announcement']} Announcement Channel",
+        value=promo_channel.mention if promo_channel else "Not configured (`>setpromodemo #channel`)",
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['audit']} Audit Log Channel",
+        value=audit_channel.mention if audit_channel else "Not configured (`>setaudit #channel`)",
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['ladder']} Rank Ladder Sequence",
+        value=ladder_str,
+        inline=False
+    )
+    embed.add_field(
+        name=f"{EMOJIS['warning']} Staff Daily Quota",
+        value="Max **3 Kicks / 3 Bans per 24 hours** for Staff Members",
+        inline=False
+    )
+
+    embed.set_footer(text=f"{ctx.guild.name} • Configuration Dashboard", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
     await ctx.reply(embed=embed)
 
 
-@bot.command(name="daily")
-async def daily(ctx):
-    """Claims daily coins."""
-    import time
-    user_id = str(ctx.author.id)
-    now = time.time()
-    last_claim = config.get("daily_cooldowns", {}).get(user_id, 0)
-    emojis = get_emoji_dict(ctx.guild)
-
-    if now - last_claim < 86400:
-        remaining = int(86400 - (now - last_claim)) // 3600
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['warning']} You already claimed your daily reward! Come back in **{remaining} hours**.", color=discord.Color.blue()))
-        return
-
-    if "daily_cooldowns" not in config:
-        config["daily_cooldowns"] = {}
-    config["daily_cooldowns"][user_id] = now
-    
-    econ = get_user_econ(ctx.author.id)
-    reward = 250
-    econ["wallet"] += reward
-    save_config()
-
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Claimed your daily reward of **{reward}** coins!", color=discord.Color.blue()))
-
-
-@bot.command(name="work")
-async def work(ctx):
-    """Works to earn coins."""
-    import time
-    user_id = str(ctx.author.id)
-    now = time.time()
-    last_work = config.get("work_cooldowns", {}).get(user_id, 0)
-    emojis = get_emoji_dict(ctx.guild)
-
-    if now - last_work < 3600:
-        remaining = int(3600 - (now - last_work)) // 60
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['warning']} You are exhausted! Work again in **{remaining} minutes**.", color=discord.Color.blue()))
-        return
-
-    if "work_cooldowns" not in config:
-        config["work_cooldowns"] = {}
-    config["work_cooldowns"][user_id] = now
-
-    earned = random.randint(50, 200)
-    jobs = ["Discord Mod", "Developer", "Graphic Designer", "Support Representative"]
-    job = random.choice(jobs)
-
-    econ = get_user_econ(ctx.author.id)
-    econ["wallet"] += earned
-    save_config()
-
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Worked as a **{job}** and earned **{earned}** coins!", color=discord.Color.blue()))
-
-
-@bot.command(name="beg")
-async def beg(ctx):
-    """Begs for coins."""
-    import time
-    user_id = str(ctx.author.id)
-    now = time.time()
-    last_beg = config.get("beg_cooldowns", {}).get(user_id, 0)
-    emojis = get_emoji_dict(ctx.guild)
-
-    if now - last_beg < 300:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['warning']} Please wait 5 minutes between begging attempts.", color=discord.Color.blue()))
-        return
-
-    if "beg_cooldowns" not in config:
-        config["beg_cooldowns"] = {}
-    config["beg_cooldowns"][user_id] = now
-
-    if random.choice([True, False]):
-        earned = random.randint(10, 50)
-        econ = get_user_econ(ctx.author.id)
-        econ["wallet"] += earned
-        save_config()
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} A kind stranger gave you **{earned}** coins!", color=discord.Color.blue()))
-    else:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Nobody gave you any coins this time.", color=discord.Color.blue()))
-
-
-@bot.command(name="deposit", aliases=["dep"])
-async def deposit(ctx, amount: str):
-    """Deposits coins into bank."""
-    econ = get_user_econ(ctx.author.id)
-    emojis = get_emoji_dict(ctx.guild)
-
-    if amount.lower() == "all":
-        amt = econ["wallet"]
-    else:
-        try:
-            amt = int(amount)
-        except ValueError:
-            await ctx.reply("Invalid amount.")
-            return
-
-    if amt <= 0 or amt > econ["wallet"]:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Invalid deposit amount.", color=discord.Color.blue()))
-        return
-
-    econ["wallet"] -= amt
-    econ["bank"] += amt
-    save_config()
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Deposited **{amt}** coins into your bank!", color=discord.Color.blue()))
-
-
-@bot.command(name="withdraw", aliases=["with"])
-async def withdraw(ctx, amount: str):
-    """Withdraws coins from bank."""
-    econ = get_user_econ(ctx.author.id)
-    emojis = get_emoji_dict(ctx.guild)
-
-    if amount.lower() == "all":
-        amt = econ["bank"]
-    else:
-        try:
-            amt = int(amount)
-        except ValueError:
-            await ctx.reply("Invalid amount.")
-            return
-
-    if amt <= 0 or amt > econ["bank"]:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Invalid withdrawal amount.", color=discord.Color.blue()))
-        return
-
-    econ["bank"] -= amt
-    econ["wallet"] += amt
-    save_config()
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Withdrew **{amt}** coins from your bank!", color=discord.Color.blue()))
-
-
-@bot.command(name="pay")
-async def pay(ctx, member: discord.Member, amount: int):
-    """Transfers wallet coins to another member."""
-    emojis = get_emoji_dict(ctx.guild)
-    if amount <= 0:
-        return
-    sender = get_user_econ(ctx.author.id)
-    if sender["wallet"] < amount:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Insufficient funds in wallet.", color=discord.Color.blue()))
-        return
-
-    receiver = get_user_econ(member.id)
-    sender["wallet"] -= amount
-    receiver["wallet"] += amount
-    save_config()
-
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Sent **{amount}** coins to {member.mention}!", color=discord.Color.blue()))
-
-
-@bot.command(name="leaderboard", aliases=["lb"])
-async def leaderboard(ctx):
-    """Displays top server economy balances."""
-    emojis = get_emoji_dict(ctx.guild)
-    sorted_econ = sorted(config.get("economy", {}).items(), key=lambda x: x[1].get("wallet", 0) + x[1].get("bank", 0), reverse=True)[:10]
-
-    lb_str = ""
-    for idx, (uid, data) in enumerate(sorted_econ, 1):
-        m = ctx.guild.get_member(int(uid))
-        name = m.display_name if m else f"User {uid}"
-        total = data.get("wallet", 0) + data.get("bank", 0)
-        lb_str += f"**#{idx} {name}** — {total} coins\n"
-
-    embed = discord.Embed(title=f"{emojis['trophy']} SLS Helper • Economy Leaderboard", description=lb_str or "No records.", color=discord.Color.blue())
-    await ctx.reply(embed=embed)
-
-
-# =====================================================================
-# MINI-GAMES MODULE
-# =====================================================================
-
-@bot.command(name="slots")
-async def slots(ctx, bet: int):
-    """Gambles coins on a slot machine."""
-    emojis = get_emoji_dict(ctx.guild)
-    econ = get_user_econ(ctx.author.id)
-
-    if bet <= 0 or econ["wallet"] < bet:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Invalid bet amount or insufficient funds.", color=discord.Color.blue()))
-        return
-
-    symbols = ["🟦", "💎", "⭐", "🔔", "7️⃣"]
-    s1, s2, s3 = random.choice(symbols), random.choice(symbols), random.choice(symbols)
-
-    if s1 == s2 == s3:
-        payout = bet * 5
-        econ["wallet"] += payout
-        res = f"🎉 **JACKPOT!** You won **{payout}** coins!"
-    elif s1 == s2 or s2 == s3 or s1 == s3:
-        payout = bet * 2
-        econ["wallet"] += payout - bet
-        res = f"✨ **MATCH!** You won **{payout}** coins!"
-    else:
-        econ["wallet"] -= bet
-        res = f"❌ You lost **{bet}** coins!"
-
-    save_config()
-    embed = discord.Embed(title=f"{emojis['dice']} Slot Machine", description=f"[ {s1} | {s2} | {s3} ]\n\n{res}", color=discord.Color.blue())
-    await ctx.reply(embed=embed)
-
-
-@bot.command(name="dice")
-async def dice_game(ctx, bet: int, guess: int):
-    """Bets coins on a dice roll (1-6)."""
-    emojis = get_emoji_dict(ctx.guild)
-    econ = get_user_econ(ctx.author.id)
-
-    if bet <= 0 or econ["wallet"] < bet or guess < 1 or guess > 6:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Invalid bet or guess (choose 1-6).", color=discord.Color.blue()))
-        return
-
-    roll = random.randint(1, 6)
-    if roll == guess:
-        win = bet * 4
-        econ["wallet"] += win
-        res = f"🎉 **CORRECT!** Rolled a **{roll}**. Won **{win}** coins!"
-    else:
-        econ["wallet"] -= bet
-        res = f"❌ Rolled a **{roll}**. Lost **{bet}** coins."
-
-    save_config()
-    await ctx.reply(embed=discord.Embed(description=f"{emojis['dice']} {res}", color=discord.Color.blue()))
-
-
-@bot.command(name="coinflip", aliases=["cf"])
-async def coinflip_game(ctx, bet: int = 0, choice: str = "heads"):
-    """Flips a coin or bets on outcome."""
-    emojis = get_emoji_dict(ctx.guild)
-    result = random.choice(["heads", "tails"])
-
-    if bet <= 0:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['success']} Coin landed on **{result.capitalize()}**!", color=discord.Color.blue()))
-        return
-
-    econ = get_user_econ(ctx.author.id)
-    if econ["wallet"] < bet:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Insufficient funds.", color=discord.Color.blue()))
-        return
-
-    if choice.lower() == result:
-        econ["wallet"] += bet
-        res = f"🎉 Landed on **{result.capitalize()}**! Won **{bet}** coins!"
-    else:
-        econ["wallet"] -= bet
-        res = f"❌ Landed on **{result.capitalize()}**! Lost **{bet}** coins."
-
-    save_config()
-    await ctx.reply(embed=discord.Embed(description=res, color=discord.Color.blue()))
-
-
-@bot.command(name="rps")
-async def rps(ctx, choice: str, bet: int = 0):
-    """Plays Rock Paper Scissors."""
-    emojis = get_emoji_dict(ctx.guild)
-    user_choice = choice.lower()
-    if user_choice not in ["rock", "paper", "scissors"]:
-        await ctx.reply("Choose `rock`, `paper`, or `scissors`.")
-        return
-
-    bot_choice = random.choice(["rock", "paper", "scissors"])
-    econ = get_user_econ(ctx.author.id)
-
-    if bet > 0 and econ["wallet"] < bet:
-        await ctx.reply(embed=discord.Embed(description=f"{emojis['error']} Insufficient funds.", color=discord.Color.blue()))
-        return
-
-    if user_choice == bot_choice:
-        res = f"👔 **Tie!** Bot also chose **{bot_choice}**."
-    elif (user_choice == "rock" and bot_choice == "scissors") or (user_choice == "paper" and bot_choice == "rock") or (user_choice == "scissors" and bot_choice == "paper"):
-        if bet > 0:
-            econ["wallet"] += bet
-            save_config()
-        res = f"🎉 **You Win!** Bot chose **{bot_choice}**. Won **{bet}** coins!"
-    else:
-        if bet > 0:
-            econ["wallet"] -= bet
-            save_config()
-        res = f"❌ **You Lose!** Bot chose **{bot_choice}**. Lost **{bet}** coins."
-
-    await ctx.reply(embed=discord.Embed(description=res, color=discord.Color.blue()))
-
-
-# =====================================================================
-# MAIN HELP COMMAND
-# =====================================================================
+# =========================
+# HELP COMMAND
+# =========================
 
 @bot.command(name="help")
 async def help_command(ctx):
-    emojis = get_emoji_dict(ctx.guild)
-    embed = discord.Embed(
-        title=f"{emojis['gear']} SLS Helper • Command Center",
-        description="Complete command suite for SLS Helper:",
-        color=discord.Color.blue()
-    )
-    embed.add_field(name=f"{emojis['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>staff`, `>train`, `>trainings`", inline=False)
-    embed.add_field(name=f"{emojis['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
-    embed.add_field(name=f"{emojis['ticket']} Support & Tickets", value="`>sendticket`, `>setstaffrole @role`, `>setcategory <type> #category`", inline=False)
-    embed.add_field(name=f"{emojis['coin']} Economy", value="`>balance`, `>daily`, `>work`, `>beg`, `>deposit`, `>withdraw`, `>pay`, `>leaderboard`", inline=False)
-    embed.add_field(name=f"{emojis['dice']} Mini-Games", value="`>slots <bet>`, `>dice <bet> <guess>`, `>coinflip [bet] [choice]`, `>rps <choice> [bet]`", inline=False)
-    embed.add_field(name=f"{emojis['gear']} Setup & Emojis", value="`>setupemojis`, `>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`", inline=False)
-    
-    if ctx.author.id == OWNER_ID:
-        embed.add_field(name="👑 Owner Commands", value="`>eval`, `>restart`, `>shutdown`, `>botservers`, `>addcoins`, `>removecoins`", inline=False)
-
-    embed.set_footer(text="SLS Helper System")
+    embed = discord.Embed(title=f"{EMOJIS['gear']} SLS Helper • Command Center", description="Here are all available command modules:", color=THEME_BLUE)
+    embed.add_field(name=f"{EMOJIS['shield']} Staff & Management", value="`>promo`, `>demo`, `>super`, `>superintro`, `>staffintro`, `>staff`, `>role`, `>train`, `>trainings`, `>steal`, `>anc` (bot owner)", inline=False)
+    embed.add_field(name=f"{EMOJIS['warning']} Moderation", value="`>kick`, `>ban`, `>unban`, `>mute`, `>unmute`, `>warn`, `>unwarn`, `>clear`", inline=False)
+    embed.add_field(name=f"{EMOJIS['ticket']} Support & Tickets", value="`>sendticket [#channel]`, `>setstaffrole @role`, `>setcategory <support/purchase/partnership> #category`", inline=False)
+    embed.add_field(name=f"{EMOJIS['user']} Utility & Info", value="`>ping`, `>serverinfo`, `>userinfo`, `>avatar`", inline=False)
+    embed.add_field(name=f"{EMOJIS['success']} Fun & Games", value="`>coinflip`, `>roll`, `>slots <bet>`, `>betflip <heads/tails> <bet>`", inline=False)
+    embed.add_field(name=f"{EMOJIS['purchase']} Economy", value="`>economy` for the full list: balance, daily, work, beg, crime, deposit, withdraw, pay, leaderboard, shop, buy, sell, inventory, bankupgrade, rob, slots, betflip", inline=False)
+    embed.add_field(name=f"{EMOJIS['gear']} Setup", value="`>ranks add @role`, `>ranks clear`, `>setstaffsupervisor`, `>setpromodemo`, `>setaudit`, `>setlogchan #channel`, `>setecochan #channel`, `>staffsettings`", inline=False)
+    if is_bot_owner(ctx):
+        embed.add_field(name=f"{EMOJIS['shield']} Bot Owner", value="`>ownerhelp`, `>shutdown`, `>restart`, `>disable <command>`, `>enable <command>`, `>maintenance on/off`, `>setstatus <text>`, `>clearstatus`, `>servercount`", inline=False)
     await ctx.reply(embed=embed, mention_author=False)
 
+
+# =========================
+# EVENTS & STARTUP
+# =========================
 
 @bot.event
 async def on_ready():
     bot.add_view(TicketDropdownView())
     bot.add_view(TicketPanelActionsView())
     logging.info("SLS Helper logged in as %s", bot.user)
+
+
+@bot.event
+async def on_guild_join(guild):
+    await upload_emoji_pack(guild)
+
+
+@bot.event
+async def on_message(message):
+    # Message creation is intentionally not logged to avoid high-volume log spam.
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.guild and after.author.id != (bot.user.id if bot.user else None) and before.content != after.content:
+        await log_server_event(
+            after.guild,
+            "Message Edited",
+            f"**Author:** {after.author.mention} (`{after.author.id}`)\n"
+            f"**Channel:** {after.channel.mention}\n**Before:**\n{(before.content or '[No text content]')[:1300]}\n"
+            f"**After:**\n{(after.content or '[No text content]')[:1300]}\n[Jump to message]({after.jump_url})",
+            discord.Color.orange()
+        )
+
+
+@bot.event
+async def on_message_delete(message):
+    if message.guild and message.author.id != (bot.user.id if bot.user else None):
+        await log_server_event(
+            message.guild,
+            "Message Deleted",
+            f"**Author:** {message.author.mention} (`{message.author.id}`)\n"
+            f"**Channel:** {message.channel.mention}\n**Content:**\n{(message.content or '[No text content]')[:3000]}",
+            discord.Color.red()
+        )
+
+
+@bot.event
+async def on_raw_message_delete(payload):
+    if payload.cached_message is None and payload.guild_id:
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Message Deleted (Not Cached)",
+            f"A message was deleted in {channel.mention if channel else f'<#{payload.channel_id}>'}.\n"
+            f"**Message ID:** `{payload.message_id}`\nMessage content was unavailable because it was not cached.",
+            discord.Color.red()
+        )
+
+
+@bot.event
+async def on_member_join(member):
+    await log_server_event(member.guild, "Member Joined", f"{member.mention} (`{member.id}`) joined the server.", discord.Color.green())
+
+
+@bot.event
+async def on_member_remove(member):
+    await log_server_event(member.guild, "Member Left", f"**Member:** {member} (`{member.id}`)", discord.Color.orange())
+
+
+@bot.event
+async def on_member_update(before, after):
+    changes = []
+    if before.nick != after.nick:
+        changes.append(f"**Nickname:** `{before.nick or before.name}` → `{after.nick or after.name}`")
+    old_roles = {role.id: role for role in before.roles}
+    new_roles = {role.id: role for role in after.roles}
+    added = [role.mention for role_id, role in new_roles.items() if role_id not in old_roles]
+    removed = [role.mention for role_id, role in old_roles.items() if role_id not in new_roles]
+    if added:
+        changes.append("**Roles added:** " + ", ".join(added))
+    if removed:
+        changes.append("**Roles removed:** " + ", ".join(removed))
+    if changes:
+        await log_server_event(after.guild, "Member Updated", f"**Member:** {after.mention} (`{after.id}`)\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_member_ban(guild, user):
+    await log_server_event(guild, "Member Banned", f"**User:** {user} (`{user.id}`)", discord.Color.red())
+
+
+@bot.event
+async def on_member_unban(guild, user):
+    await log_server_event(guild, "Member Unbanned", f"**User:** {user} (`{user.id}`)", discord.Color.green())
+
+
+@bot.event
+async def on_guild_channel_create(channel):
+    mention = channel.mention if hasattr(channel, "mention") else channel.name
+    await log_server_event(channel.guild, "Channel Created", f"**Channel:** {mention}\n**Type:** {type(channel).__name__}", discord.Color.green())
+
+
+@bot.event
+async def on_guild_channel_delete(channel):
+    await log_server_event(channel.guild, "Channel Deleted", f"**Channel:** #{channel.name} (`{channel.id}`)\n**Type:** {type(channel).__name__}", discord.Color.red())
+
+
+@bot.event
+async def on_guild_channel_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Name:** `{before.name}` → `{after.name}`")
+    if hasattr(before, "topic") and before.topic != after.topic:
+        changes.append(f"**Topic:** `{before.topic or 'None'}` → `{after.topic or 'None'}`")
+    if hasattr(before, "slowmode_delay") and before.slowmode_delay != after.slowmode_delay:
+        changes.append(f"**Slowmode:** `{before.slowmode_delay}s` → `{after.slowmode_delay}s`")
+    if before.category_id != after.category_id:
+        changes.append(f"**Category:** `{before.category}` → `{after.category}`")
+    if changes:
+        mention = after.mention if hasattr(after, "mention") else after.name
+        await log_server_event(after.guild, "Channel Updated", f"**Channel:** {mention}\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_guild_role_create(role):
+    await log_server_event(role.guild, "Role Created", f"**Role:** {role.mention} (`{role.id}`)", discord.Color.green())
+
+
+@bot.event
+async def on_guild_role_delete(role):
+    await log_server_event(role.guild, "Role Deleted", f"**Role:** {role.name} (`{role.id}`)", discord.Color.red())
+
+
+@bot.event
+async def on_guild_role_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Name:** `{before.name}` → `{after.name}`")
+    if before.permissions != after.permissions:
+        changes.append("**Permissions:** changed")
+    if before.color != after.color:
+        changes.append(f"**Color:** `{before.color}` → `{after.color}`")
+    if before.hoist != after.hoist or before.mentionable != after.mentionable:
+        changes.append(f"**Display settings:** hoist `{before.hoist}` → `{after.hoist}`, mentionable `{before.mentionable}` → `{after.mentionable}`")
+    if changes:
+        await log_server_event(after.guild, "Role Updated", f"**Role:** {after.mention} (`{after.id}`)\n" + "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    old_channel = before.channel.name if before.channel else "Not in voice"
+    new_channel = after.channel.name if after.channel else "Not in voice"
+    if before.channel == after.channel and before.self_mute == after.self_mute and before.mute == after.mute and before.self_deaf == after.self_deaf and before.deaf == after.deaf and before.self_stream == after.self_stream and before.self_video == after.self_video:
+        return
+    await log_server_event(member.guild, "Voice State Updated", f"**Member:** {member.mention}\n**Voice channel:** `{old_channel}` → `{new_channel}`\nMute, deaf, stream, or camera state changed.", THEME_BLUE)
+
+
+@bot.event
+async def on_guild_emojis_update(guild, before, after):
+    old_emojis = {emoji.id: emoji for emoji in before}
+    new_emojis = {emoji.id: emoji for emoji in after}
+    added = [str(emoji) for emoji_id, emoji in new_emojis.items() if emoji_id not in old_emojis]
+    removed = [emoji.name for emoji_id, emoji in old_emojis.items() if emoji_id not in new_emojis]
+    changes = []
+    if added:
+        changes.append("**Added:** " + " ".join(added))
+    if removed:
+        changes.append("**Removed:** " + ", ".join(removed))
+    if changes:
+        await log_server_event(guild, "Custom Emojis Updated", "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_invite_create(invite):
+    channel = invite.channel.mention if invite.channel else "Unknown"
+    await log_server_event(invite.guild, "Invite Created", f"**Code:** `{invite.code}`\n**Channel:** {channel}\n**Created by:** {invite.inviter or 'Unknown'}", discord.Color.green())
+
+
+@bot.event
+async def on_invite_delete(invite):
+    channel = invite.channel.mention if invite.channel else "Unknown"
+    await log_server_event(invite.guild, "Invite Deleted", f"**Code:** `{invite.code}`\n**Channel:** {channel}", discord.Color.orange())
+
+
+@bot.event
+async def on_webhooks_update(channel):
+    await log_server_event(channel.guild, "Webhooks Updated", f"Webhook configuration changed in {channel.mention}.", discord.Color.orange())
+
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.guild_id and payload.user_id != (bot.user.id if bot.user else None):
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Reaction Added",
+            f"**User:** <@{payload.user_id}>\n**Channel:** {channel.mention if channel else f'<#{payload.channel_id}>'}\n"
+            f"**Emoji:** {payload.emoji}\n**Message ID:** `{payload.message_id}`",
+            discord.Color.green()
+        )
+
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    if payload.guild_id and payload.user_id != (bot.user.id if bot.user else None):
+        guild = bot.get_guild(payload.guild_id)
+        channel = guild.get_channel(payload.channel_id) if guild else None
+        await log_server_event(
+            guild,
+            "Reaction Removed",
+            f"**User:** <@{payload.user_id}>\n**Channel:** {channel.mention if channel else f'<#{payload.channel_id}>'}\n"
+            f"**Emoji:** {payload.emoji}\n**Message ID:** `{payload.message_id}`",
+            discord.Color.orange()
+        )
+
+
+@bot.event
+async def on_guild_update(before, after):
+    changes = []
+    if before.name != after.name:
+        changes.append(f"**Server name:** `{before.name}` → `{after.name}`")
+    if before.icon != after.icon:
+        changes.append("**Server icon:** changed")
+    if before.verification_level != after.verification_level:
+        changes.append(f"**Verification level:** `{before.verification_level}` → `{after.verification_level}`")
+    if before.description != after.description:
+        changes.append("**Server description:** changed")
+    if changes:
+        await log_server_event(after, "Server Settings Updated", "\n".join(changes), discord.Color.orange())
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, commands.CheckFailure):
+        if not is_bot_owner(ctx) and config.get("maintenance", {}).get("enabled", False):
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} SLS Helper is currently in maintenance mode.", color=THEME_BLUE))
+            return
+        if not is_bot_owner(ctx) and ctx.command is not None and config.get("disabled_commands", {}).get(ctx.command.qualified_name.lower()):
+            await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['warning']} The `>{ctx.command.qualified_name}` command is disabled.", color=THEME_BLUE))
+            return
+        if not economy_channel_allowed(ctx):
+            channel_id = guild_setting("economy_channels", ctx.guild.id)
+            await ctx.reply(embed=economy_embed("Wrong Channel", f"{EMOJIS['warning']} Economy commands are only available in <#{channel_id}>.", THEME_BLUE))
+            return
+        await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} You don't have permission to use this command.", color=discord.Color.red()))
+        return
+    
+    logging.exception("Command error:", exc_info=error)
+    await ctx.reply(embed=discord.Embed(description=f"{EMOJIS['error']} Error: `{str(error)}`", color=discord.Color.red()))
 
 
 load_config()
