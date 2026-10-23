@@ -27,7 +27,7 @@ intents.message_content = True
 bot = commands.Bot(
     command_prefix=">",
     intents=intents,
-    activity=discord.Game(name="Super League Stars • Made by Afnan the GOAT"),
+    activity=discord.Game(name="Super League Stars"),
     help_command=None
 )
 
